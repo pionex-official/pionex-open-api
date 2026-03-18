@@ -1,0 +1,1209 @@
+openapi: 3.0.3
+info:
+  title: Pionex Open API
+  description: |
+    Pionex cryptocurrency exchange RESTful API.
+
+    ## Authentication
+    Private endpoints require HMAC SHA256 signature authentication.
+
+    **Required headers:**
+    - `PIONEX-KEY`: Your API Key
+    - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+    **Required query parameter:**
+    - `timestamp`: Current time in milliseconds (valid range: +/- 20 seconds)
+
+    **Signature construction:**
+    - GET: `METHOD + PATH_URL + SORTED_QUERY + TIMESTAMP`
+    - POST/DELETE: `METHOD + PATH_URL + SORTED_QUERY + TIMESTAMP + BODY`
+
+    Query parameters are sorted alphabetically by key, joined with `&`, and appended to the path with `?`.
+    The signature is generated using HMAC SHA256 with your API Secret, then converted to hexadecimal.
+
+    ## Rate Limits
+    - All endpoints: 10 requests per second per IP
+    - Private endpoints: 10 requests per second per account
+    - Exceeding limits returns HTTP 429 and a 60-second ban (increases by 10s per additional violation)
+  version: 1.0.0
+  contact:
+    name: Pionex API Support
+    url: https://t.me/pionexapi
+
+servers:
+  - url: https://api.pionex.com
+    description: Production
+
+security: []
+
+tags:
+  - name: Common
+    description: Common symbols information
+  - name: Market
+    description: Market data (public)
+  - name: Account
+    description: Account information (private)
+  - name: Trade
+    description: Order management (private)
+
+paths:
+  /api/v1/common/symbols:
+    get:
+      tags: [Common]
+      summary: Get symbols info
+      description: Get trading pair information. Weight: 5.
+      operationId: getSymbols
+      parameters:
+        - name: symbols
+          in: query
+          description: "Concatenate multiple symbols with ','"
+          schema:
+            type: string
+            example: "BTC_USDT,ETH_USDT"
+        - name: type
+          in: query
+          description: Market type. Defaults to SPOT when symbol is not specified.
+          schema:
+            type: string
+            enum: [SPOT, PERP]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          symbols:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/SymbolInfo'
+
+  /api/v1/market/trades:
+    get:
+      tags: [Market]
+      summary: Get market trades
+      description: Get recent trades. Weight: 1.
+      operationId: getMarketTrades
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: limit
+          in: query
+          description: "Default: 100. Range: 10 - 500"
+          schema:
+            type: integer
+            default: 100
+            minimum: 10
+            maximum: 500
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          trades:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/MarketTrade'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/market/depth:
+    get:
+      tags: [Market]
+      summary: Get order book depth
+      description: Get order book snapshot. Weight: 1.
+      operationId: getMarketDepth
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: limit
+          in: query
+          description: "Default: 20. Range: 1 - 1000"
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 1000
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          bids:
+                            type: array
+                            description: "Bid orders [price, quantity], sorted by price descending"
+                            items:
+                              type: array
+                              items:
+                                type: string
+                              minItems: 2
+                              maxItems: 2
+                          asks:
+                            type: array
+                            description: "Ask orders [price, quantity], sorted by price ascending"
+                            items:
+                              type: array
+                              items:
+                                type: string
+                              minItems: 2
+                              maxItems: 2
+                          updateTime:
+                            type: integer
+                            format: int64
+                            description: Update timestamp in milliseconds
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/market/tickers:
+    get:
+      tags: [Market]
+      summary: Get 24hr tickers
+      description: Get 24-hour price change statistics. Weight: 1.
+      operationId: getTickers
+      parameters:
+        - name: symbol
+          in: query
+          description: Trading pair symbol. Returns all tickers if not specified.
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: type
+          in: query
+          description: Defaults to SPOT if symbol is not specified. Accepts SPOT or PERP.
+          schema:
+            type: string
+            enum: [SPOT, PERP]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          tickers:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Ticker'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/market/bookTickers:
+    get:
+      tags: [Market]
+      summary: Get book tickers
+      description: Get best bid/ask prices. Weight: 1.
+      operationId: getBookTickers
+      parameters:
+        - name: symbol
+          in: query
+          description: Trading pair symbol. Returns all if not specified.
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: type
+          in: query
+          description: Defaults to PERP if symbol is not specified. Accepts SPOT or PERP.
+          schema:
+            type: string
+            enum: [SPOT, PERP]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          tickers:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/BookTicker'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/market/klines:
+    get:
+      tags: [Market]
+      summary: Get klines (candlestick data)
+      description: Get OHLCV candlestick data. Weight: 1. Maximum 10,000 records.
+      operationId: getKlines
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: interval
+          in: query
+          required: true
+          description: Kline interval
+          schema:
+            type: string
+            enum: [1M, 5M, 15M, 30M, 60M, 4H, 8H, 12H, 1D]
+        - name: endTime
+          in: query
+          description: End time in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: "Default: 100. Range: 1 - 500"
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          klines:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Kline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/account/balances:
+    get:
+      tags: [Account]
+      summary: Get account balances
+      description: Get trading account balances (excludes bot and earn accounts). Weight: 1.
+      operationId: getBalances
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          balances:
+                            type: array
+                            description: Balances sorted by coin in ascending order
+                            items:
+                              $ref: '#/components/schemas/Balance'
+              example:
+                result: true
+                data:
+                  balances:
+                    - coin: BTC
+                      free: "0.90000000"
+                      frozen: "0.00000000"
+                    - coin: USDT
+                      free: "100.00000000"
+                      frozen: "900.00000000"
+                timestamp: 1566691672311
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/order:
+    post:
+      tags: [Trade]
+      summary: New order
+      description: Place a new order. Weight: 1.
+      operationId: newOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewOrderRequest'
+      responses:
+        '200':
+          description: Order placed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          orderId:
+                            type: integer
+                            format: int64
+                            description: Unique order identifier
+                          clientOrderId:
+                            type: string
+                            description: Client-provided order identifier
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      tags: [Trade]
+      summary: Get order
+      description: Get order details by order ID. Weight: 1.
+      operationId: getOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: orderId
+          in: query
+          required: true
+          description: Order ID
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Trade]
+      summary: Cancel order
+      description: Cancel an existing order. Weight: 1.
+      operationId: cancelOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, orderId]
+              properties:
+                symbol:
+                  type: string
+                  description: Trading pair symbol
+                  example: BTC_USDT
+                orderId:
+                  type: integer
+                  format: int64
+                  description: Order ID to cancel
+      responses:
+        '200':
+          description: Order cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/massOrder:
+    post:
+      tags: [Trade]
+      summary: New multiple orders
+      description: Place multiple orders at once (up to 20, LIMIT only). Weight: 1.
+      operationId: newMassOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MassOrderRequest'
+      responses:
+        '200':
+          description: Orders placed successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          orderIds:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                orderId:
+                                  type: integer
+                                  format: int64
+                                clientOrderId:
+                                  type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/orderByClientOrderId:
+    get:
+      tags: [Trade]
+      summary: Get order by client order ID
+      description: Get order details by client order ID. Weight: 1.
+      operationId: getOrderByClientOrderId
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: clientOrderId
+          in: query
+          required: true
+          description: Client order ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/openOrders:
+    get:
+      tags: [Trade]
+      summary: Get open orders
+      description: Get all open orders for a symbol. Maximum 200 open orders per symbol. Weight: 5.
+      operationId: getOpenOrders
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: symbol
+          in: query
+          required: true
+          description: Trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          orders:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/allOrders:
+    get:
+      tags: [Trade]
+      summary: Get all orders
+      description: Get all orders (open and closed) for a symbol. Weight: 5.
+      operationId: getAllOrders
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: symbol
+          in: query
+          required: true
+          description: Trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: startTime
+          in: query
+          description: Start time in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: endTime
+          in: query
+          description: End time in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          description: "Default: 50. Range: 1 - 200. Returns latest orders when exceeding limit."
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          orders:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Trade]
+      summary: Cancel all orders
+      description: Cancel all open orders for a symbol. Weight: 1.
+      operationId: cancelAllOrders
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol]
+              properties:
+                symbol:
+                  type: string
+                  description: Trading pair symbol
+                  example: BTC_USDT
+      responses:
+        '200':
+          description: All orders cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/fills:
+    get:
+      tags: [Trade]
+      summary: Get fills
+      description: Get trade fills for a symbol. Returns latest 100 fills when exceeding limit. Weight: 5.
+      operationId: getFills
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: symbol
+          in: query
+          required: true
+          description: Trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT
+        - name: startTime
+          in: query
+          description: Start time in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: endTime
+          in: query
+          description: End time in milliseconds
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          fills:
+                            type: array
+                            description: Fills sorted by time descending
+                            items:
+                              $ref: '#/components/schemas/Fill'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/trade/fillsByOrderId:
+    get:
+      tags: [Trade]
+      summary: Get fills by order ID
+      description: Get trade fills for a specific order. Weight: 5.
+      operationId: getFillsByOrderId
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: orderId
+          in: query
+          required: true
+          description: Order ID. Returns empty list if not found.
+          schema:
+            type: integer
+            format: int64
+        - name: fromId
+          in: query
+          description: Return 100 earlier fills before this fill ID. Returns latest fills if unspecified.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          fills:
+                            type: array
+                            description: Fills sorted by time descending
+                            items:
+                              $ref: '#/components/schemas/Fill'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: PIONEX-KEY
+      description: |
+        API Key authentication. Requires two headers:
+        - `PIONEX-KEY`: Your API Key
+        - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+        And a `timestamp` query parameter (milliseconds).
+
+  parameters:
+    Timestamp:
+      name: timestamp
+      in: query
+      required: true
+      description: Current timestamp in milliseconds (valid range +/- 20 seconds)
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    BaseResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Request success indicator
+        timestamp:
+          type: integer
+          format: int64
+          description: Response timestamp in milliseconds
+
+    ErrorResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          example: false
+        code:
+          type: string
+          description: Error code
+          enum:
+            - APIKEY_LOST
+            - SIGNATURE_LOST
+            - IP_NOT_WHITELISTED
+            - INVALID_APIKEY
+            - INVALID_SIGNATURE
+            - APIKEY_EXPIRED
+            - INVALID_TIMESTAMP
+            - PERMISSION_DENIED
+            - TRADE_INVALID_SYMBOL
+            - TRADE_PARAMETER_ERROR
+            - TRADE_OPERATION_DENIED
+            - TRADE_ORDER_NOT_FOUND
+            - MARKET_INVALID_SYMBOL
+            - MARKET_PARAMETER_ERROR
+            - MARKET_INVALID_TIME
+        message:
+          type: string
+          description: Human-readable error message
+        timestamp:
+          type: integer
+          format: int64
+
+    SymbolInfo:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Trading pair identifier
+          example: BTC_USDT
+        name:
+          type: string
+          description: Name (PERP only)
+        type:
+          type: string
+          enum: [SPOT, PERP]
+          description: Market type
+        baseCurrency:
+          type: string
+          description: Base asset
+          example: BTC
+        quoteCurrency:
+          type: string
+          description: Quote asset
+          example: USDT
+        basePrecision:
+          type: integer
+          description: Base currency decimal places
+        quotePrecision:
+          type: integer
+          description: Quote currency decimal places
+        amountPrecision:
+          type: integer
+          description: Market buy order amount decimal places
+        minNotional:
+          type: string
+          description: Minimum notional value (PERP only)
+        minAmount:
+          type: string
+          description: Minimum order amount (SPOT only)
+          example: "10"
+        minTradeSize:
+          type: string
+          description: Minimum limit order quantity
+        maxTradeSize:
+          type: string
+          description: Maximum limit order quantity
+        minTradeDumping:
+          type: string
+          description: Minimum market sell quantity
+        maxTradeDumping:
+          type: string
+          description: Maximum market sell quantity
+        buyCeiling:
+          type: string
+          description: Maximum buy price multiplier ratio
+        sellFloor:
+          type: string
+          description: Minimum sell price multiplier ratio
+        enable:
+          type: boolean
+          description: Whether trading is enabled
+        maxImpactMarket:
+          type: string
+          description: Market order max impact price (PERP only)
+        liquidationFeeRate:
+          type: string
+          description: Liquidation fee percentage (PERP only)
+
+    MarketTrade:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Trading pair symbol
+        tradeId:
+          type: string
+          description: Unique trade identifier
+        price:
+          type: string
+          description: Transaction price
+        size:
+          type: string
+          description: Transaction quantity
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Trade side (from taker perspective)
+        timestamp:
+          type: string
+          description: Execution timestamp in milliseconds
+
+    Ticker:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Trading pair symbol
+        time:
+          type: integer
+          format: int64
+          description: Timestamp in milliseconds
+        open:
+          type: string
+          description: Open price
+        close:
+          type: string
+          description: Close price
+        high:
+          type: string
+          description: Highest price
+        low:
+          type: string
+          description: Lowest price
+        volume:
+          type: string
+          description: 24-hour total trading volume
+        amount:
+          type: string
+          description: 24-hour total trading amount
+        count:
+          type: string
+          description: 24-hour total trading count
+
+    BookTicker:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Trading pair symbol
+        bidPrice:
+          type: string
+          description: Best bid price
+        bidSize:
+          type: string
+          description: Volume at the best bid price
+        askPrice:
+          type: string
+          description: Best ask price
+        askSize:
+          type: string
+          description: Volume at the best ask price
+        timestamp:
+          type: string
+          description: Timestamp in milliseconds
+
+    Kline:
+      type: object
+      properties:
+        time:
+          type: integer
+          format: int64
+          description: Timestamp in milliseconds
+        open:
+          type: string
+          description: Open price
+        close:
+          type: string
+          description: Close price
+        high:
+          type: string
+          description: Highest price
+        low:
+          type: string
+          description: Lowest price
+        volume:
+          type: string
+          description: Total trading volume
+
+    Balance:
+      type: object
+      properties:
+        coin:
+          type: string
+          description: Cryptocurrency identifier
+          example: BTC
+        free:
+          type: string
+          description: "Available balance, 8 decimal digits"
+          example: "0.90000000"
+        frozen:
+          type: string
+          description: "Frozen balance, 8 decimal digits"
+          example: "0.00000000"
+
+    NewOrderRequest:
+      type: object
+      required: [symbol, side, type]
+      properties:
+        symbol:
+          type: string
+          description: Trading pair symbol
+          example: BTC_USDT
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Order direction
+        type:
+          type: string
+          enum: [LIMIT, MARKET]
+          description: Order type
+        clientOrderId:
+          type: string
+          description: "Client order ID (alphanumeric and hyphen, max 64 characters)"
+          maxLength: 64
+          pattern: '^[a-zA-Z0-9-]+$'
+        size:
+          type: string
+          description: Order quantity (required for LIMIT orders and MARKET sell orders)
+        price:
+          type: string
+          description: Order price (required for LIMIT orders)
+        amount:
+          type: string
+          description: Order amount (required for MARKET buy orders)
+        IOC:
+          type: boolean
+          description: Immediate-or-cancel flag
+          default: false
+
+    MassOrderRequest:
+      type: object
+      required: [symbol, orders]
+      properties:
+        symbol:
+          type: string
+          description: Trading pair symbol
+          example: BTC_USDT
+        orders:
+          type: array
+          description: Collection of orders (up to 20)
+          maxItems: 20
+          items:
+            type: object
+            required: [side, type, size, price]
+            properties:
+              side:
+                type: string
+                enum: [BUY, SELL]
+              type:
+                type: string
+                enum: [LIMIT]
+                description: Only LIMIT orders are supported
+              clientOrderId:
+                type: string
+                description: "Client order ID (alphanumeric and hyphen, max 64 characters)"
+                maxLength: 64
+              size:
+                type: string
+                description: Order quantity
+              price:
+                type: string
+                description: Order price
+
+    Order:
+      type: object
+      properties:
+        orderId:
+          type: integer
+          format: int64
+          description: Order ID
+        symbol:
+          type: string
+          description: Trading pair symbol
+        type:
+          type: string
+          enum: [LIMIT, MARKET]
+          description: Order type
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Order direction
+        price:
+          type: string
+          description: Order price
+        size:
+          type: string
+          description: Order quantity
+        amount:
+          type: string
+          description: Market buy order amount
+        filledSize:
+          type: string
+          description: Filled quantity
+        filledAmount:
+          type: string
+          description: Filled amount
+        fee:
+          type: string
+          description: Transaction fee
+        feeCoin:
+          type: string
+          description: Fee currency
+        status:
+          type: string
+          enum: [OPEN, CLOSED]
+          description: Order status
+        IOC:
+          type: boolean
+          description: Immediate-or-cancel flag
+        clientOrderId:
+          type: string
+          description: Client order ID
+        source:
+          type: string
+          enum: [MANUAL, API]
+          description: Order source
+        createTime:
+          type: integer
+          format: int64
+          description: Create timestamp in milliseconds
+        updateTime:
+          type: integer
+          format: int64
+          description: Update timestamp in milliseconds
+
+    Fill:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Fill ID
+        orderId:
+          type: integer
+          format: int64
+          description: Order ID
+        symbol:
+          type: string
+          description: Trading pair symbol
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Trade direction
+        role:
+          type: string
+          enum: [TAKER, MAKER]
+          description: Participant role
+        price:
+          type: string
+          description: Fill price
+        size:
+          type: string
+          description: Fill quantity
+        fee:
+          type: string
+          description: Transaction fee
+        feeCoin:
+          type: string
+          description: Fee currency
+        timestamp:
+          type: integer
+          format: int64
+          description: Fill timestamp in milliseconds
