@@ -1,0 +1,522 @@
+asyncapi: 2.6.0
+info:
+  title: Pionex WebSocket API
+  version: 1.0.0
+  description: |
+    Pionex cryptocurrency exchange WebSocket API for real-time market data and account updates.
+
+    ## Connection
+    - **Public stream**: `wss://ws.pionex.com/wsPub` (no authentication)
+    - **Private stream**: `wss://ws.pionex.com/ws` (requires authentication)
+
+    ## Authentication (Private Stream)
+    Connect with query parameters: `key`, `timestamp`, `signature`.
+
+    Signature generation:
+    1. Create key-value pairs for `key` and `timestamp`
+    2. Sort alphabetically, join with `&`
+    3. Build string: `/ws?<sorted_params>websocket_auth`
+    4. HMAC SHA256 with API Secret, convert to hex
+
+    Example: `wss://ws.pionex.com/ws?key=xxx&timestamp=1655896754515&signature=3e901247...`
+
+    ## Heartbeat
+    - Server sends `{"op": "PING", "timestamp": <ms>}` every 15 seconds
+    - Client must reply `{"op": "PONG", "timestamp": <ms>}`
+    - Missing 3 consecutive PONGs triggers disconnection
+
+    ## Limits
+    - Maximum 10 concurrent connections per IP
+  contact:
+    name: Pionex API Support
+    url: https://t.me/pionexapi
+
+servers:
+  public:
+    url: wss://ws.pionex.com/wsPub
+    protocol: wss
+    description: Public stream (market data, no auth required)
+  private:
+    url: wss://ws.pionex.com/ws
+    protocol: wss
+    description: Private stream (account data, auth required)
+    security:
+      - apiKey: []
+
+channels:
+  /trade:
+    description: Real-time market trade stream
+    servers:
+      - public
+    subscribe:
+      operationId: onTrade
+      summary: Receive trade updates
+      message:
+        $ref: '#/components/messages/TradeMessage'
+    bindings:
+      ws:
+        method: GET
+    x-subscribe-request:
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: SUBSCRIBE
+          topic:
+            type: string
+            const: TRADE
+          symbol:
+            type: string
+            example: BTC_USDT
+        required: [op, topic, symbol]
+
+  /depth:
+    description: Real-time order book depth stream
+    servers:
+      - public
+    subscribe:
+      operationId: onDepth
+      summary: Receive order book depth updates
+      message:
+        $ref: '#/components/messages/DepthMessage'
+    x-subscribe-request:
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: SUBSCRIBE
+          topic:
+            type: string
+            const: DEPTH
+          symbol:
+            type: string
+            example: BTC_USDT
+          limit:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 5
+        required: [op, topic, symbol]
+
+  /order:
+    description: |
+      Real-time order updates. Updates every 250ms when there are changes, every 5000ms when idle.
+    servers:
+      - private
+    subscribe:
+      operationId: onOrder
+      summary: Receive order updates
+      message:
+        $ref: '#/components/messages/OrderMessage'
+    x-subscribe-request:
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: SUBSCRIBE
+          topic:
+            type: string
+            const: ORDER
+          symbol:
+            type: string
+            example: BTC_USDT
+        required: [op, topic, symbol]
+
+  /fill:
+    description: Real-time fill (trade execution) updates across all markets
+    servers:
+      - private
+    subscribe:
+      operationId: onFill
+      summary: Receive fill updates
+      message:
+        $ref: '#/components/messages/FillMessage'
+    x-subscribe-request:
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: SUBSCRIBE
+          topic:
+            type: string
+            const: FILL
+          symbol:
+            type: string
+            example: BTC_USDT
+        required: [op, topic, symbol]
+
+  /balance:
+    description: Real-time account balance updates
+    servers:
+      - private
+    subscribe:
+      operationId: onBalance
+      summary: Receive balance updates
+      message:
+        $ref: '#/components/messages/BalanceMessage'
+    x-subscribe-request:
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: SUBSCRIBE
+          topic:
+            type: string
+            const: BALANCE
+        required: [op, topic]
+
+components:
+  securitySchemes:
+    apiKey:
+      type: httpApiKey
+      name: signature
+      in: query
+      description: |
+        HMAC SHA256 authentication via query parameters: key, timestamp, signature.
+
+  messages:
+    TradeMessage:
+      name: TradeMessage
+      title: Trade Update
+      summary: Real-time trade execution data
+      payload:
+        $ref: '#/components/schemas/TradePayload'
+      examples:
+        - payload:
+            topic: TRADE
+            symbol: BTC_USDT
+            timestamp: 1566691672311
+            data:
+              - symbol: BTC_USDT
+                tradeId: "600848671"
+                price: "7962.62"
+                size: "0.0122"
+                side: BUY
+                timestamp: 1566691672311
+
+    DepthMessage:
+      name: DepthMessage
+      title: Depth Update
+      summary: Order book depth snapshot
+      payload:
+        $ref: '#/components/schemas/DepthPayload'
+      examples:
+        - payload:
+            topic: DEPTH
+            symbol: BTC_USDT
+            timestamp: 1566691672311
+            data:
+              bids:
+                - ["27964.01", "0.0675"]
+                - ["27963.23", "0.9111"]
+              asks:
+                - ["27979.32", "0.0731"]
+                - ["27980.97", "1.0294"]
+
+    OrderMessage:
+      name: OrderMessage
+      title: Order Update
+      summary: Order status change notification
+      payload:
+        $ref: '#/components/schemas/OrderPayload'
+
+    FillMessage:
+      name: FillMessage
+      title: Fill Update
+      summary: Trade fill execution notification
+      payload:
+        $ref: '#/components/schemas/FillPayload'
+
+    BalanceMessage:
+      name: BalanceMessage
+      title: Balance Update
+      summary: Account balance change notification
+      payload:
+        $ref: '#/components/schemas/BalancePayload'
+      examples:
+        - payload:
+            topic: BALANCE
+            timestamp: 1566691672311
+            data:
+              balances:
+                - coin: BTC
+                  free: "0.90000000"
+                  frozen: "0.00000000"
+                - coin: USDT
+                  free: "100.00000000"
+                  frozen: "900.00000000"
+              timestamp: 1566691672311
+
+    PingMessage:
+      name: PingMessage
+      title: Server Heartbeat Ping
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: PING
+          timestamp:
+            type: integer
+            format: int64
+            description: Server timestamp in milliseconds
+
+    PongMessage:
+      name: PongMessage
+      title: Client Heartbeat Pong
+      payload:
+        type: object
+        properties:
+          op:
+            type: string
+            const: PONG
+          timestamp:
+            type: integer
+            format: int64
+            description: Timestamp from the PING message
+
+  schemas:
+    TradePayload:
+      type: object
+      properties:
+        topic:
+          type: string
+          const: TRADE
+        symbol:
+          type: string
+          description: Trading pair symbol
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: array
+          description: Up to 100 trade records sorted by timestamp descending
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/TradeRecord'
+
+    TradeRecord:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Trading pair symbol
+        tradeId:
+          type: string
+          description: Unique trade identifier
+        price:
+          type: string
+          description: Execution price
+        size:
+          type: string
+          description: Trade quantity
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Liquidity taker's direction
+        timestamp:
+          type: integer
+          format: int64
+          description: Fill time in milliseconds
+
+    DepthPayload:
+      type: object
+      properties:
+        topic:
+          type: string
+          const: DEPTH
+        symbol:
+          type: string
+          description: Trading pair symbol
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: object
+          properties:
+            bids:
+              type: array
+              description: "Bid orders [[price, size], ...] sorted by price descending"
+              items:
+                type: array
+                items:
+                  type: string
+                minItems: 2
+                maxItems: 2
+            asks:
+              type: array
+              description: "Ask orders [[price, size], ...] sorted by price ascending"
+              items:
+                type: array
+                items:
+                  type: string
+                minItems: 2
+                maxItems: 2
+
+    OrderPayload:
+      type: object
+      properties:
+        topic:
+          type: string
+          const: ORDER
+        symbol:
+          type: string
+          description: Trading pair symbol
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          $ref: '#/components/schemas/OrderRecord'
+
+    OrderRecord:
+      type: object
+      properties:
+        orderId:
+          type: integer
+          format: int64
+          description: Order ID
+        symbol:
+          type: string
+          description: Trading pair symbol
+        type:
+          type: string
+          enum: [LIMIT, MARKET]
+          description: Order type
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Order direction
+        price:
+          type: string
+          description: Order price
+        size:
+          type: string
+          description: Order quantity
+        filledSize:
+          type: string
+          description: Filled quantity
+        filledAmount:
+          type: string
+          description: Filled amount
+        fee:
+          type: string
+          description: Transaction fee
+        feeCoin:
+          type: string
+          description: Fee currency
+        IOC:
+          type: boolean
+          description: Immediate-or-cancel flag
+        status:
+          type: string
+          enum: [OPEN, CLOSED]
+          description: Order status
+        clientOrderId:
+          type: string
+          description: Client order ID
+        createTime:
+          type: integer
+          format: int64
+          description: Create timestamp in milliseconds
+        updateTime:
+          type: integer
+          format: int64
+          description: Update timestamp in milliseconds
+
+    FillPayload:
+      type: object
+      properties:
+        topic:
+          type: string
+          const: FILL
+        symbol:
+          type: string
+          description: Trading pair symbol
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          $ref: '#/components/schemas/FillRecord'
+
+    FillRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Fill record ID
+        orderId:
+          type: integer
+          format: int64
+          description: Associated order ID
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Trade direction
+        role:
+          type: string
+          enum: [TAKER, MAKER]
+          description: Participant role
+        price:
+          type: string
+          description: Execution price
+        size:
+          type: string
+          description: Fill quantity
+        fee:
+          type: string
+          description: Transaction fee
+        feeCoin:
+          type: string
+          description: Fee currency
+        timestamp:
+          type: integer
+          format: int64
+          description: Fill timestamp in milliseconds
+
+    BalancePayload:
+      type: object
+      properties:
+        topic:
+          type: string
+          const: BALANCE
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: object
+          properties:
+            balances:
+              type: array
+              items:
+                $ref: '#/components/schemas/BalanceRecord'
+            timestamp:
+              type: integer
+              format: int64
+              description: Data timestamp in milliseconds
+
+    BalanceRecord:
+      type: object
+      properties:
+        coin:
+          type: string
+          description: Currency code
+          example: BTC
+        free:
+          type: string
+          description: Available balance
+          example: "0.90000000"
+        frozen:
+          type: string
+          description: Frozen balance
+          example: "0.00000000"
