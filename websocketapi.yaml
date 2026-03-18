@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Pionex WebSocket API
-  version: 1.0.0
+  version: "1.0.0"
   description: |
     Pionex cryptocurrency exchange WebSocket API for real-time market data and account updates.
 

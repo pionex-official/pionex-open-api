@@ -25,7 +25,7 @@ info:
     - All endpoints: 10 requests per second per IP
     - Private endpoints: 10 requests per second per account
     - Exceeding limits returns HTTP 429 and a 60-second ban (increases by 10s per additional violation)
-  version: 1.0.0
+  version: "1.0.0"
   contact:
     name: Pionex API Support
     url: https://t.me/pionexapi
