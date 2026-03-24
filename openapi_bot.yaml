@@ -64,10 +64,10 @@ info:
 
     Each API Key can be configured with **Bot reading** and/or **Bot trading** permissions. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
 
-    **Endpoints requiring Bot reading permission:**
+    **Endpoints requiring `Bot reading` permission:**
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
 
-    **Endpoints requiring Bot trading permission:**
+    **Endpoints requiring `Bot trading` permission:**
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
     - `POST /api/v1/bot/orders/futuresGrid/adjustParams` — Adjust futures grid (add investment / modify range)
     - `POST /api/v1/bot/orders/futuresGrid/reduce` — Reduce futures grid position

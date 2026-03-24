@@ -86,6 +86,25 @@ info:
     7. Generate HMAC SHA256 using your API Secret and the concatenated string, convert to hexadecimal
 
     The resulting hex signature goes into the request header as `PIONEX-SIGNATURE`.
+
+    ### API Key Permissions
+
+    Each API Key can be configured with **Enable reading** and/or **Enable trading** permissions. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
+
+    **Endpoints requiring `Enable reading` permission:**
+    - `GET /api/v1/account/balances` — Get account balances
+    - `GET /api/v1/trade/order` — Get order
+    - `GET /api/v1/trade/orderByClientOrderId` — Get order by client order ID
+    - `GET /api/v1/trade/openOrders` — Get open orders
+    - `GET /api/v1/trade/allOrders` — Get all orders
+    - `GET /api/v1/trade/fills` — Get fills
+    - `GET /api/v1/trade/fillsByOrderId` — Get fills by order ID
+
+    **Endpoints requiring `Enable trading` permission:**
+    - `POST /api/v1/trade/order` — Place a new order
+    - `DELETE /api/v1/trade/order` — Cancel an order
+    - `POST /api/v1/trade/massOrder` — Place multiple orders
+    - `DELETE /api/v1/trade/allOrders` — Cancel all orders
   version: 1.0.0
   contact:
     name: Pionex API Support
