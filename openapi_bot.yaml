@@ -8,6 +8,8 @@ info:
 
     ## Basic Info
 
+    > **Note:** The Bot API is currently in **Beta**. If you would like to use it, please contact us at [open@pionex.com](mailto:open@pionex.com).
+
     **Base URL:** `https://api.pionex.com`
 
     **Request Format:**
@@ -57,6 +59,19 @@ info:
 
     **Required query parameter:**
     - `timestamp`: Current time in milliseconds (valid within +/-20 seconds)
+
+    ### API Key Permissions
+
+    Each API Key can be configured with **Bot reading** and/or **Bot trading** permissions. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
+
+    **Endpoints requiring Bot reading permission:**
+    - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
+
+    **Endpoints requiring Bot trading permission:**
+    - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
+    - `POST /api/v1/bot/orders/futuresGrid/adjustParams` — Adjust futures grid (add investment / modify range)
+    - `POST /api/v1/bot/orders/futuresGrid/reduce` — Reduce futures grid position
+    - `POST /api/v1/bot/orders/futuresGrid/cancel` — Cancel futures grid order
   version: 1.0.0
   contact:
     name: Pionex API Support
