@@ -8,7 +8,8 @@ This repository contains machine-readable API definitions in [OpenAPI 3.0](https
 
 | File | Description |
 | --- | --- |
-| `openapi.yaml` | REST API — Market data, trading, and account endpoints |
+| `openapi.yaml` | Trade API — Market data, trading, and account endpoints |
+| `openapi_futures.yaml` | Futures API — Futures trading endpoints (Beta) |
 | `openapi_bot.yaml` | Bot API — Futures Grid bot endpoints (Beta) |
 | `websocketapi.yaml` | WebSocket API — Real-time market data and account updates |
 
@@ -30,7 +31,7 @@ You can use these spec files with any OpenAPI-compatible tool:
 
 ## Authentication
 
-Private endpoints require an API Key and HMAC SHA256 signature. See the `info.description` section in each spec file for full authentication details, or refer to the [Pionex API documentation](https://pionex-doc.gitbook.io/apidocs).
+Private endpoints require an API Key and HMAC SHA256 signature. See the `info.description` section in each spec file for full authentication details, or refer to the [Pionex API documentation](https://www.pionex.com/docs/api-docs).
 
 ## License
 
