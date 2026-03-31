@@ -195,7 +195,7 @@ paths:
         - name: productIds
           in: query
           required: false
-          description: Comma-separated product ID list (e.g. `p1,p2,p3`)
+          description: Comma-separated product ID list (e.g. `BTC-USDXO-260402-64500-P-USDT,BTC-USDXO-260402-65000-P-USDT`)
           schema:
             type: string
       responses:
