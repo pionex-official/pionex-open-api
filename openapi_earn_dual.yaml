@@ -93,7 +93,7 @@ tags:
   - name: Dual Investment Public
     description: Public dual investment endpoints — no authentication required
   - name: Dual Investment Private
-    description: Private dual investment endpoints — Bearer Token required
+    description: Private dual investment endpoints — API Key required
 
 paths:
   /api/v1/earn/dual/symbols:
