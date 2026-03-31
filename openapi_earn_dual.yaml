@@ -1,0 +1,950 @@
+openapi: 3.0.3
+info:
+  title: Pionex Earn Open API - Dual Investment
+  description: |
+    Pionex Dual Investment Open API.
+
+    # General Info
+
+    ## Basic Info
+
+    **Base URL:** `https://api.pionex.com`
+
+    **Request Format:**
+    - For private requests, the `timestamp` parameter (in milliseconds) must be included in the query string. The timestamp is valid within a range of +/-20 seconds.
+    - Private requests require `PIONEX-KEY` (API Key) and `PIONEX-SIGNATURE` headers.
+    - GET requests: additional parameters are passed in the query string.
+    - POST/DELETE requests: parameters are passed in the request body as JSON (`application/json`).
+    - Zero-valued number parameters are disregarded.
+
+    **Signature Construction:**
+    - GET: `METHOD + PATH_URL + QUERY + TIMESTAMP`
+    - POST/DELETE: `METHOD + PATH_URL + QUERY + TIMESTAMP + body`
+
+    **Response Format:**
+
+    All responses are JSON objects containing:
+    - `result` (boolean): success indicator
+    - `timestamp` (number): response timestamp in milliseconds
+    - On success: `data` object with business information
+    - On failure: `code` (string) and `message` (string) with error details
+
+    Success example:
+    ```json
+    {"result": true, "data": {...}, "timestamp": 1566691672311}
+    ```
+
+    Failure example:
+    ```json
+    {"result": false, "code": "PARAMETER_ERROR", "message": "Invalid parameter", "timestamp": 1566691672311}
+    ```
+
+    ## Rate Limits
+
+    - Each endpoint has a weight value that determines how many requests it counts toward the limit.
+    - IP-based and account-based limits operate independently.
+    - All endpoints share the 10 per second limit based on IP.
+    - Private endpoints share the 10 per second limit based on ACCOUNT.
+    - Exceeding the weight limit results in HTTP 429 status code.
+
+    ## Authentication
+
+    [API Key Guide](https://www.pionex.com/docs/api-docs/references/api-key-guide)
+
+    Private endpoints require HMAC SHA256 signature authentication.
+
+    **Required headers:**
+    - `PIONEX-KEY`: Your API Key
+    - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+    **Required query parameter:**
+    - `timestamp`: Current time in milliseconds (valid within +/-20 seconds)
+
+    ### API Key Permissions
+
+    **Public endpoints (no authentication required):**
+    - `GET /api/v1/earn/dual/symbols` — List supported trading pairs
+    - `GET /api/v1/earn/dual/openProducts` — List open products
+    - `GET /api/v1/earn/dual/prices` — Get product prices
+    - `GET /api/v1/earn/dual/index` — Get underlying index price
+    - `GET /api/v1/earn/dual/deliveryPrices` — Get historical delivery prices
+
+    **Endpoints requiring `Earn reading` permission:**
+    - `GET /api/v1/earn/dual/balances` — Get user balances
+    - `POST /api/v1/earn/dual/invests` — Batch query investment orders
+    - `GET /api/v1/earn/dual/records` — Get investment history
+
+    **Endpoints requiring `Earn trading` permission:**
+    - `POST /api/v1/earn/dual/invest` — Create investment order
+    - `DELETE /api/v1/earn/dual/invest` — Revoke investment order
+    - `POST /api/v1/earn/dual/collect` — Collect settled earnings
+  version: 1.0.0
+  contact:
+    name: Pionex API Support
+    url: https://t.me/pionexapi
+
+servers:
+  - url: https://api.pionex.com
+    description: Production
+
+security: []
+
+tags:
+  - name: Dual Investment Public
+    description: Public dual investment endpoints — no authentication required
+  - name: Dual Investment Private
+    description: Private dual investment endpoints — Bearer Token required
+
+paths:
+  /api/v1/earn/dual/symbols:
+    get:
+      tags: [Dual Investment Public]
+      summary: List supported trading pairs
+      description: "Returns all trading pairs supported by Dual Investment, optionally filtered by base currency. Weight: 1."
+      operationId: dualSymbols
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: false
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualSymbolsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/openProducts:
+    get:
+      tags: [Dual Investment Public]
+      summary: List open products
+      description: "Returns open Dual Investment products for the specified trading pair and type. Weight: 1."
+      operationId: dualProducts
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: true
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: true
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: true
+          description: Dual investment type
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          description: Investment currency
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualProductsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/prices:
+    get:
+      tags: [Dual Investment Public]
+      summary: Get product prices
+      description: "Returns the latest price and investability status for Dual Investment products. Filter by trading pair or a comma-separated list of product IDs. Weight: 1."
+      operationId: dualPrices
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: false
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: false
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+        - name: productIds
+          in: query
+          required: false
+          description: Comma-separated product ID list (e.g. `p1,p2,p3`)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualPricesData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/index:
+    get:
+      tags: [Dual Investment Public]
+      summary: Get underlying index price
+      description: "Returns the current index price for the specified Dual Investment underlying. Weight: 1."
+      operationId: dualIndex
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: false
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: false
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualIndexData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/deliveryPrices:
+    get:
+      tags: [Dual Investment Public]
+      summary: Get historical delivery prices
+      description: "Returns historical delivery prices, optionally filtered by trading pair and time range. Weight: 1."
+      operationId: deliveryPrices
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: false
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: false
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          required: false
+          description: Start timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: endTime
+          in: query
+          required: false
+          description: End timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryPricesData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/balances:
+    get:
+      tags: [Dual Investment Private]
+      summary: Get user balances
+      description: "Returns the authenticated user's Dual Investment account balances. Weight: 1."
+      operationId: dualBalances
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: merge
+          in: query
+          required: false
+          description: Whether to merge balances across currencies
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualBalancesData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/invest:
+    post:
+      tags: [Dual Investment Private]
+      summary: Create investment order
+      description: "Creates a new Dual Investment order. Weight: 1."
+      operationId: dualInvest
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualInvestRequest'
+      responses:
+        '200':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualInvestData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Dual Investment Private]
+      summary: Revoke investment order
+      description: "Revokes a pending Dual Investment order. Weight: 1."
+      operationId: dualRevokeInvest
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: base
+          in: query
+          required: false
+          description: Base currency
+          schema:
+            type: string
+        - name: clientDualId
+          in: query
+          required: false
+          description: Client-assigned dual investment order ID
+          schema:
+            type: string
+        - name: productId
+          in: query
+          required: false
+          description: Product ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order revoked successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualRevokeInvestData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/invests:
+    post:
+      tags: [Dual Investment Private]
+      summary: Batch query investment orders
+      description: "Returns details for a batch of Dual Investment orders by client order ID list. Weight: 1."
+      operationId: dualGetInvests
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualGetInvestsRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualInvestRecordsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/records:
+    get:
+      tags: [Dual Investment Private]
+      summary: Get investment history
+      description: "Returns paginated Dual Investment history for the authenticated user. Supports filtering by trading pair, currency, status, and time range. Weight: 1."
+      operationId: dualInvestRecords
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: base
+          in: query
+          required: true
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: false
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          description: Investment currency
+          schema:
+            type: string
+        - name: filter
+          in: query
+          required: false
+          description: Status filter
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          required: false
+          description: Start timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: endTime
+          in: query
+          required: false
+          description: End timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of records to return
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualInvestRecordsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/collect:
+    post:
+      tags: [Dual Investment Private]
+      summary: Collect settled earnings
+      description: "Collects settled Dual Investment earnings into the user's account. Weight: 1."
+      operationId: dualCollect
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualCollectRequest'
+      responses:
+        '200':
+          description: Collect succeeded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualCollectData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: PIONEX-KEY
+      description: |
+        API Key authentication. Requires two headers:
+        - `PIONEX-KEY`: Your API Key
+        - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+        And a `timestamp` query parameter (milliseconds).
+
+  parameters:
+    Timestamp:
+      name: timestamp
+      in: query
+      required: true
+      description: Current timestamp in milliseconds (valid range +/- 20 seconds)
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: Bad request — invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication failed — missing or invalid Bearer Token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ─── Base ───────────────────────────────────────────────
+    BaseResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Whether the request succeeded
+        timestamp:
+          type: integer
+          format: int64
+          description: Response timestamp in milliseconds
+
+    ErrorResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          example: false
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        timestamp:
+          type: integer
+          format: int64
+
+    # ─── Dual Symbols ────────────────────────────────────────
+    DualSymbolsData:
+      type: object
+      properties:
+        coins:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualCoinSymbol'
+
+    DualCoinSymbol:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        currency:
+          type: string
+          description: Investment currency
+        basePrecision:
+          type: integer
+          format: int64
+          description: Base currency decimal precision
+        currencyPrecision:
+          type: integer
+          format: int64
+          description: Investment currency decimal precision
+        baseMin:
+          type: string
+          description: Minimum investment amount in base currency
+        currencyMin:
+          type: string
+          description: Minimum investment amount in investment currency
+        baseMax:
+          type: string
+          description: Maximum investment amount in base currency
+        currencyMax:
+          type: string
+          description: Maximum investment amount in investment currency
+
+    # ─── Dual Products ───────────────────────────────────────
+    DualProductsData:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualProduct'
+
+    DualProduct:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Product ID
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        currency:
+          type: string
+          description: Investment currency
+        type:
+          type: string
+          description: Dual investment type
+        createTime:
+          type: integer
+          format: int64
+          description: Creation timestamp in milliseconds
+        expireTime:
+          type: integer
+          format: int64
+          description: Expiry timestamp in milliseconds
+        strike:
+          type: string
+          description: Strike price
+        expired:
+          type: boolean
+          description: Whether the product has expired
+
+    # ─── Dual Prices ─────────────────────────────────────────
+    DualPricesData:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualPrice'
+
+    DualPrice:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Product ID
+        canInvest:
+          type: boolean
+          description: Whether the product is open for investment
+        profit:
+          type: string
+          description: Yield rate
+        baseSize:
+          type: string
+          description: Base currency amount
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+
+    # ─── Dual Index ──────────────────────────────────────────
+    DualIndexData:
+      type: object
+      properties:
+        index:
+          type: string
+          description: Current index price
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+
+    # ─── Delivery Prices ─────────────────────────────────────
+    DeliveryPricesData:
+      type: object
+      properties:
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryPrice'
+
+    DeliveryPrice:
+      type: object
+      properties:
+        delivery:
+          type: string
+          description: Delivery price
+        date:
+          type: string
+          description: Delivery date
+        deliveryTime:
+          type: integer
+          format: int64
+          description: Delivery timestamp in milliseconds
+
+    # ─── Dual Balances ───────────────────────────────────────
+    DualBalancesData:
+      type: object
+      properties:
+        balances:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualBalance'
+
+    DualBalance:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency
+        coin:
+          type: string
+          description: Currency
+        free:
+          type: string
+          description: Available balance
+        frozen:
+          type: string
+          description: Frozen balance
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+
+    # ─── Dual Invest ─────────────────────────────────────────
+    DualInvestRequest:
+      type: object
+      required: [base]
+      properties:
+        base:
+          type: string
+          description: Base currency
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID (idempotency key)
+        productId:
+          type: string
+          description: Product ID
+        baseAmount:
+          type: string
+          description: Investment amount in base currency (mutually exclusive with currencyAmount)
+        currencyAmount:
+          type: string
+          description: Investment amount in investment currency (mutually exclusive with baseAmount)
+        profit:
+          type: string
+          description: Expected yield rate
+
+    DualInvestData:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+        state:
+          type: string
+          description: Investment state
+
+    # ─── Dual Revoke Invest ──────────────────────────────────
+    DualRevokeInvestData:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+
+    # ─── Dual Get Invests ────────────────────────────────────
+    DualGetInvestsRequest:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency
+        clientDualIds:
+          type: array
+          items:
+            type: string
+          description: List of client-assigned dual investment order IDs
+
+    # ─── Dual Invest Records (shared by /invests and /records) ─
+    DualInvestRecordsData:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualRecord'
+
+    DualRecord:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+        state:
+          type: string
+          description: Investment state
+        productId:
+          type: string
+          description: Product ID
+        type:
+          type: string
+          description: Dual investment type
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        currency:
+          type: string
+          description: Investment currency
+        strike:
+          type: string
+          description: Strike price
+        expireTime:
+          type: integer
+          format: int64
+          description: Expiry timestamp in milliseconds
+        baseAmount:
+          type: string
+          description: Investment amount in base currency
+        currencyAmount:
+          type: string
+          description: Investment amount in investment currency
+        profit:
+          type: string
+          description: Yield rate
+        baseFilled:
+          type: string
+          description: Filled amount in base currency
+        currencyFilled:
+          type: string
+          description: Filled amount in investment currency
+        settlementState:
+          type: string
+          description: Settlement state
+        settlementTime:
+          type: integer
+          format: int64
+          description: Settlement timestamp in milliseconds
+        settlementBase:
+          type: string
+          description: Settlement base currency
+        settlementCurrency:
+          type: string
+          description: Settlement investment currency
+        deliveryPrice:
+          type: string
+          description: Delivery price
+        createTime:
+          type: integer
+          format: int64
+          description: Creation timestamp in milliseconds
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+
+    # ─── Dual Collect ────────────────────────────────────────
+    DualCollectRequest:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+        productId:
+          type: string
+          description: Product ID
+
+    DualCollectData:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
