@@ -1695,9 +1695,6 @@ components:
         quoteInvest:
           type: string
           description: Additional quote investment amount
-        investCoin:
-          type: string
-          description: Investment currency for the additional amount
 
     InvestInSpotGridRequest:
       type: object
@@ -1708,11 +1705,8 @@ components:
           description: Bot order ID
         quoteInvest:
           type: string
-          description: Additional investment amount (in quote or specified investCoin)
+          description: Additional investment amount in quote currency
           example: "100"
-        investCoin:
-          type: string
-          description: "Investment currency: quote currency (default) or base currency"
 
     CancelSpotGridRequest:
       type: object
