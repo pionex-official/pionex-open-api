@@ -69,7 +69,7 @@ info:
     - `GET /api/v1/earn/dual/index` — Get underlying index price
     - `GET /api/v1/earn/dual/deliveryPrices` — Get historical delivery prices
 
-    **Endpoints requiring `View` permission:**
+    **Endpoints requiring `Enable reading` permission:**
     - `GET /api/v1/earn/dual/balances` — Get user balances
     - `POST /api/v1/earn/dual/invests` — Batch query investment orders
     - `GET /api/v1/earn/dual/records` — Get investment history
