@@ -1669,9 +1669,11 @@ components:
           type: string
           description: |
             Close sell mode on cancellation:
-            `TO_QUOTE` - Return base+quote as-is (default),
-            `TO_USDT` - Sell base to quote on close
-          enum: [TO_QUOTE, TO_USDT]
+            `NOT_SELL` - Keep base+quote as-is, do not sell (default),
+            `TO_QUOTE` - Sell base to quote on close,
+            `TO_USDT` - Sell base to USDT on close
+          enum: [NOT_SELL, TO_QUOTE, TO_USDT]
+          default: NOT_SELL
 
     AdjustSpotGridParamsRequest:
       type: object
@@ -1722,10 +1724,11 @@ components:
         closeSellModel:
           type: string
           description: |
-            Close sell mode:
-            `TO_QUOTE` - Return base+quote as-is (default),
-            `TO_USDT` - Sell base to quote on close
-          enum: [TO_QUOTE, TO_USDT]
+            Close sell mode set at creation:
+            `NOT_SELL` - Keep base+quote as-is (default),
+            `TO_QUOTE` - Sell base to quote on close,
+            `TO_USDT` - Sell base to USDT on close
+          enum: [NOT_SELL, TO_QUOTE, TO_USDT]
         slippage:
           type: string
           description: "Close position slippage (e.g. \"0.01\" = 1%)"
