@@ -1735,15 +1735,11 @@ components:
 
     ProfitSpotGridRequest:
       type: object
-      required: [buOrderId, coin, amount]
+      required: [buOrderId, amount]
       properties:
         buOrderId:
           type: string
           description: Bot order ID
-        coin:
-          type: string
-          description: Currency to extract (e.g. USDT)
-          example: USDT
         amount:
           type: string
           description: Amount to extract
