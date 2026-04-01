@@ -11,6 +11,7 @@ This repository contains machine-readable API definitions in [OpenAPI 3.0](https
 | `openapi.yaml` | Trade API — Market data, trading, and account endpoints |
 | `openapi_futures.yaml` | Futures API — Futures trading endpoints (Beta) |
 | `openapi_bot.yaml` | Bot API — Futures Grid bot endpoints (Beta) |
+| `openapi_earn_dual.yaml` | Earn API — Dual Investment endpoints (Beta)|
 | `websocketapi.yaml` | WebSocket API — Real-time market data and account updates |
 
 ## Quick Start
