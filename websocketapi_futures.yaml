@@ -1,0 +1,1315 @@
+openapi: 3.0.3
+info:
+  title: Pionex Futures WebSocket API
+  version: 1.0.0
+  description: |
+    Pionex cryptocurrency futures exchange WebSocket API for real-time market data and account updates.
+
+    # General Info
+
+    > **Note:** The Futures API is currently in **Beta**. If you would like to use it, please contact us at [open@pionex.com](mailto:open@pionex.com).
+
+    ## Connection Endpoints
+    - **Public stream**: `wss://ws.pionex.com/wsPub` (no authentication)
+    - **Private stream**: `wss://ws.pionex.com/wsUA` (requires authentication)
+
+    ## Authentication (Private Stream)
+
+    Private futures streams require authentication via message after connection:
+
+    ```json
+    {"op": "auth", "args": [apiKey, timestamp, signature]}
+    ```
+
+    ### Signing
+
+    1. Obtain the current millisecond timestamp
+    2. Concatenate the timestamp with the string `websocket_auth`: `timestamp + "websocket_auth"`
+    3. Generate HMAC SHA256 using your API Secret and the concatenated string
+    4. Convert the signature to hexadecimal
+    5. Send auth message with [apiKey, timestamp, signature] as args
+
+    **Example:**
+
+    Concatenated string for signing:
+    ```
+    1655896754515websocket_auth
+    ```
+
+    Generated signature:
+    ```
+    3e901247350e744353f4a7a479fd67181184a627b119352ec1b7a432925e772c
+    ```
+
+    Auth message:
+    ```json
+    {"op": "auth", "args": ["OElNn5D_Frnf5MR0ChjYdG7PunK0AOgHTvevwzWS", 1655896754515, "3e901247350e744353f4a7a479fd67181184a627b119352ec1b7a432925e772c"]}
+    ```
+
+    ## Subscribe / Unsubscribe
+
+    Send JSON message after connection (and after authentication for private stream):
+    ```json
+    {"op": "SUBSCRIBE", "topic": "<TOPIC>", "symbol": "<SYMBOL>"}
+    {"op": "UNSUBSCRIBE", "topic": "<TOPIC>", "symbol": "<SYMBOL>"}
+    ```
+
+    Success response:
+    ```json
+    {"type": "SUBSCRIBED", "topic": "<TOPIC>", "symbol": "<SYMBOL>"}
+    {"type": "UNSUBSCRIBED", "topic": "<TOPIC>", "symbol": "<SYMBOL>"}
+    ```
+
+    ## Heartbeat
+    - Server sends `{"op": "PING", "timestamp": <ms>}` every 15 seconds
+    - Client must reply `{"op": "PONG", "timestamp": <ms>}`
+    - Missing 3 consecutive PONGs triggers disconnection
+
+    ## Limits
+    - Maximum 5 messages per second per connection
+    - Maximum 10 concurrent connections per IP
+    - Single connection can subscribe to multiple data streams
+
+servers:
+  - url: wss://ws.pionex.com
+    description: Pionex Futures WebSocket Server
+
+tags:
+  - name: Public Stream
+    description: "Public channels via `wss://ws.pionex.com/wsPub` (no auth required)"
+  - name: Private Stream
+    description: "Private channels via `wss://ws.pionex.com/wsUA` (auth required)"
+
+paths:
+  "/wsPub (trade)":
+    get:
+      tags: [Public Stream]
+      summary: Trade Stream
+      operationId: subscribeTrade
+      description: |
+        **Topic**: `TRADE`
+
+        Real-time market trade stream for futures symbols. Only TAKER side trades are pushed.
+
+        **Subscribe**:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "TRADE", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "TRADE", "symbol": "BTC_USDT_PERP"}
+        ```
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Futures trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+      responses:
+        '200':
+          description: Trade update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeMessage'
+              example:
+                topic: TRADE
+                symbol: BTC_USDT_PERP
+                timestamp: 1566691672311
+                data:
+                  - symbol: BTC_USDT_PERP
+                    tradeId: "600848671"
+                    price: "30000.00"
+                    size: "0.1000"
+                    side: BUY
+                    type: NORMAL
+                    timestamp: 1566691672311
+                  - symbol: BTC_USDT_PERP
+                    tradeId: "600848672"
+                    price: "30001.50"
+                    size: "0.0500"
+                    side: SELL
+                    type: NORMAL
+                    timestamp: 1566691672315
+
+  "/wsPub (depth)":
+    get:
+      tags: [Public Stream]
+      summary: Depth Stream
+      operationId: subscribeDepth
+      description: |
+        **Topic**: `DEPTH`
+
+        Real-time order book depth stream. Updates every 250ms (if changes) to 5s (if no changes).
+
+        **Subscribe**:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "DEPTH", "symbol": "BTC_USDT_PERP", "limit": 5}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "DEPTH", "symbol": "BTC_USDT_PERP"}
+        ```
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Futures trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+        - name: limit
+          in: query
+          description: "Depth level limit. Range: 1 - 100. Default: 5"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 5
+      responses:
+        '200':
+          description: Depth update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepthMessage'
+              example:
+                topic: DEPTH
+                symbol: BTC_USDT_PERP
+                timestamp: 1566691672311
+                data:
+                  bids:
+                    - ["29964.01", "0.0675"]
+                    - ["29963.23", "0.9111"]
+                    - ["29961.52", "0.1022"]
+                    - ["29960.00", "3.8891"]
+                    - ["29958.13", "1.2008"]
+                  asks:
+                    - ["29979.32", "0.0731"]
+                    - ["29980.97", "1.0294"]
+                    - ["29981.62", "2.5651"]
+                    - ["29986.45", "1.2415"]
+                    - ["29990.16", "1.9978"]
+
+  "/wsPub (orderbook)":
+    get:
+      tags: [Public Stream]
+      summary: Order Book Stream (Incremental)
+      operationId: subscribeOrderBook
+      description: |
+        **Topic**: `ORDERBOOK`
+
+        Real-time incremental order book updates. Maintains 100 price levels.
+
+        **Initial Response**: Full snapshot with 100 levels
+        **Subsequent Updates**: Incremental changes only (50ms aggregation)
+
+        **Subscribe**:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "ORDERBOOK", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "ORDERBOOK", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        **Update Logic**:
+        - `action: "SNAPSHOT"` - Initial full order book (100 levels)
+        - `action: "UPDATE"` - Incremental changes (aggregated over 50ms)
+        - `size: "0"` means the price level was removed
+        - `number` and `prevNumber` provide sequence tracking for consistency
+        - Order book always maintains 100 levels: when a level is consumed, the 101st level becomes the new 100th
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Futures trading pair symbol (only futures symbols supported)
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+      responses:
+        '200':
+          description: Order book update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderBookMessage'
+              examples:
+                snapshot:
+                  summary: Initial snapshot
+                  value:
+                    topic: ORDERBOOK
+                    symbol: BTC_USDT_PERP
+                    timestamp: 1566691672311
+                    data:
+                      action: SNAPSHOT
+                      bids:
+                        - ["29964.01", "0.0675"]
+                        - ["29963.23", "0.9111"]
+                      asks:
+                        - ["29979.32", "0.0731"]
+                        - ["29980.97", "1.0294"]
+                      number: 13333
+                      prevNumber: 13332
+                      timeStamp: 1566691672311
+                update:
+                  summary: Incremental update
+                  value:
+                    topic: ORDERBOOK
+                    symbol: BTC_USDT_PERP
+                    timestamp: 1566691672361
+                    data:
+                      action: UPDATE
+                      bids:
+                        - ["29964.01", "0"]
+                        - ["29965.00", "1.234"]
+                      asks: []
+                      number: 13334
+                      prevNumber: 13333
+                      timeStamp: 1566691672361
+
+  "/wsPub (index)":
+    get:
+      tags: [Public Stream]
+      summary: Index Price Stream
+      operationId: subscribeIndex
+      description: |
+        **Topic**: `INDEX`
+
+        Real-time index price, mark price, and funding rate information for futures symbols.
+
+        **Subscribe**:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "INDEX", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "INDEX", "symbol": "BTC_USDT_PERP"}
+        ```
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: Futures trading pair symbol
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+      responses:
+        '200':
+          description: Index price update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexMessage'
+              example:
+                topic: INDEX
+                symbol: BTC_USDT_PERP
+                timestamp: 1566691672311
+                data:
+                  - symbol: BTC_USDT_PERP
+                    indexPrice: "29950.50"
+                    markPrice: "29952.30"
+                    nextFundingRate: "0.0001"
+                    nextFundingTime: 1566720000000
+                    updateTime: 1566691672311
+
+  "/wsUA (order)":
+    get:
+      tags: [Private Stream]
+      summary: Order Stream
+      operationId: subscribeOrder
+      description: |
+        **Topic**: `ORDER`
+
+        Real-time futures order updates. Pushes when order state changes.
+
+        **Subscribe** (after authentication):
+        ```json
+        {"op": "SUBSCRIBE", "topic": "ORDER", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        Or subscribe to all symbols:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "ORDER", "symbol": "ALL"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "ORDER", "symbol": "BTC_USDT_PERP"}
+        ```
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: "Futures trading pair symbol, or 'ALL' for all symbols"
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+      responses:
+        '200':
+          description: Order update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuturesOrderMessage'
+              example:
+                topic: ORDER
+                symbol: BTC_USDT_PERP
+                timestamp: 1566691672311
+                data:
+                  orderId: 1234567890
+                  symbol: BTC_USDT_PERP
+                  type: LIMIT
+                  positionMode: BUYSELL
+                  isolatedMode: CROSS
+                  side: BUY
+                  positionSide: LONG
+                  price: "30000.00"
+                  origSize: "0.2000"
+                  size: "0.1000"
+                  amount: ""
+                  filledSize: "0.0500"
+                  filledAmount: "1500.00"
+                  status: OPEN
+                  reduceOnly: false
+                  clientOrderId: "9e3d93d6-e9a4-465a-a39c-2e48568fe194"
+                  source: API
+                  createTime: 1566676132311
+                  updateTime: 1566691672311
+
+  "/wsUA (fill)":
+    get:
+      tags: [Private Stream]
+      summary: Fill Stream
+      operationId: subscribeFill
+      description: |
+        **Topic**: `FILL`
+
+        Real-time fill (trade execution) updates for futures orders.
+
+        **Subscribe** (after authentication):
+        ```json
+        {"op": "SUBSCRIBE", "topic": "FILL", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        Or subscribe to all symbols:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "FILL", "symbol": "ALL"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "FILL", "symbol": "BTC_USDT_PERP"}
+        ```
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: "Futures trading pair symbol, or 'ALL' for all symbols"
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+      responses:
+        '200':
+          description: Fill update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuturesFillMessage'
+              example:
+                topic: FILL
+                symbol: BTC_USDT_PERP
+                timestamp: 1566691672311
+                data:
+                  id: 9876543210
+                  orderId: 1234567890
+                  symbol: BTC_USDT_PERP
+                  side: BUY
+                  role: TAKER
+                  price: "30000.00"
+                  size: "0.1000"
+                  fee: "0.06"
+                  feeCoin: USDT
+                  feeType: TRADING
+                  timestamp: 1566676132311
+
+  "/wsUA (balance)":
+    get:
+      tags: [Private Stream]
+      summary: Balance Stream
+      operationId: subscribeBalance
+      description: |
+        **Topic**: `BALANCE`
+
+        Real-time account balance updates for futures account. Pushes when balance changes (order, fill, funding, transfer, etc.).
+
+        Updates are aggregated within 100ms and only push when actual changes occur.
+
+        **Two message types** (discriminated by `type` field):
+        - **CROSS**: Cross margin account balance
+        - **ISOLATE_LONG / ISOLATE_SHORT / ISOLATE_BOTH**: Isolated margin position balance
+
+        **Subscribe** (after authentication):
+        ```json
+        {"op": "SUBSCRIBE", "topic": "BALANCE"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "BALANCE"}
+        ```
+      responses:
+        '200':
+          description: Balance update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuturesBalanceMessage'
+              examples:
+                cross:
+                  summary: Cross margin balance
+                  value:
+                    topic: BALANCE
+                    timestamp: 1566691672311
+                    data:
+                      type: CROSS
+                      balances:
+                        - coin: BTC
+                          free: "0.90000000"
+                          frozen: "0.00000000"
+                          debts: "0"
+                        - coin: USDT
+                          free: "10000.00000000"
+                          frozen: "5000.00000000"
+                          debts: "0"
+                      timestamp: 1566691672311
+                isolate:
+                  summary: Isolated margin balance
+                  value:
+                    topic: BALANCE
+                    timestamp: 1566691672311
+                    data:
+                      type: ISOLATE_LONG
+                      symbol: BTC_USDT_PERP
+                      balances:
+                        - coin: USDT
+                          free: "1000.00000000"
+                          frozen: "500.00000000"
+                          debts: "0"
+                      timestamp: 1566691672311
+
+  "/wsUA (risk)":
+    get:
+      tags: [Private Stream]
+      summary: Risk State Stream
+      operationId: subscribeRisk
+      description: |
+        **Topic**: `RISK`
+
+        Real-time risk state monitoring for futures account and positions.
+
+        **Two message types** (discriminated by `type` field):
+        - **CROSS**: Cross margin account risk state
+        - **ISOLATE_LONG / ISOLATE_SHORT / ISOLATE_BOTH**: Isolated margin position risk state
+
+        **Push frequency**:
+        - Non-TRADING state: every 10 seconds
+        - TRADING state: every 15 minutes
+        - State changes: immediate push
+
+        **Subscribe** (after authentication):
+        ```json
+        {"op": "SUBSCRIBE", "topic": "RISK"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "RISK"}
+        ```
+      responses:
+        '200':
+          description: Risk state update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuturesRiskMessage'
+              examples:
+                cross:
+                  summary: Cross margin risk
+                  value:
+                    topic: RISK
+                    timestamp: 1566691674607
+                    data:
+                      type: CROSS
+                      riskState: TRADING
+                      quote: USDT
+                      updatedTime: 1566691674607
+                      extraInfo:
+                        accountEquity: "15000.50"
+                        totalMaintMargin: "500.25"
+                isolate:
+                  summary: Isolated margin risk
+                  value:
+                    topic: RISK
+                    timestamp: 1566691674607
+                    data:
+                      type: ISOLATE_LONG
+                      symbol: BTC_USDT_PERP
+                      riskState: TRADING
+                      quote: USDT
+                      updatedTime: 1566691674607
+                      extraInfo:
+                        accountEquity: "2000.00"
+                        totalMaintMargin: "80.00"
+
+  "/wsUA (position)":
+    get:
+      tags: [Private Stream]
+      summary: Position Stream
+      operationId: subscribePosition
+      description: |
+        **Topic**: `POSITION`
+
+        Real-time position updates for futures trading. Pushes when position changes.
+
+        **Subscribe** (after authentication):
+        ```json
+        {"op": "SUBSCRIBE", "topic": "POSITION", "symbol": "BTC_USDT_PERP"}
+        ```
+
+        Or subscribe to all symbols:
+        ```json
+        {"op": "SUBSCRIBE", "topic": "POSITION", "symbol": "ALL"}
+        ```
+
+        **Unsubscribe**:
+        ```json
+        {"op": "UNSUBSCRIBE", "topic": "POSITION", "symbol": "BTC_USDT_PERP"}
+        ```
+      parameters:
+        - name: symbol
+          in: query
+          required: true
+          description: "Futures trading pair symbol, or 'ALL' for all symbols"
+          schema:
+            type: string
+            example: BTC_USDT_PERP
+      responses:
+        '200':
+          description: Position update message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuturesPositionMessage'
+              example:
+                topic: POSITION
+                symbol: BTC_USDT_PERP
+                timestamp: 1566691672311
+                data:
+                  positionId: "dfadaf_sa_233322"
+                  symbol: BTC_USDT_PERP
+                  isolatedMode: CROSS
+                  positionSide: LONG
+                  netSize: "2.1000"
+                  avgPrice: "28500.50"
+                  sizeLong: "2.1000"
+                  sizeShort: "0"
+                  amountLong: "-59850.00"
+                  amountShort: "0"
+                  amountSettled: "0"
+                  sizeLiquidated: "0"
+                  amountLiquidated: "0"
+                  sizeTakeover: "0"
+                  createTime: 1566676132311
+                  updateTime: 1566691672311
+
+components:
+  schemas:
+    TradeMessage:
+      type: object
+      description: Trade stream message
+      properties:
+        topic:
+          type: string
+          example: TRADE
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: array
+          description: Trade records
+          items:
+            $ref: '#/components/schemas/TradeRecord'
+
+    TradeRecord:
+      type: object
+      properties:
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        tradeId:
+          type: string
+          description: Unique trade identifier
+        price:
+          type: string
+          description: Execution price
+        size:
+          type: string
+          description: Trade quantity
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: "Liquidity taker's direction"
+        type:
+          type: string
+          enum: [NORMAL]
+          description: "Trade type (currently only NORMAL for regular trades)"
+        timestamp:
+          type: integer
+          format: int64
+          description: Trade time in milliseconds
+
+    DepthMessage:
+      type: object
+      description: Depth stream message
+      properties:
+        topic:
+          type: string
+          example: DEPTH
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: object
+          properties:
+            bids:
+              type: array
+              description: "Bid orders [[price, size], ...] sorted by price descending"
+              items:
+                type: array
+                items:
+                  type: string
+                minItems: 2
+                maxItems: 2
+            asks:
+              type: array
+              description: "Ask orders [[price, size], ...] sorted by price ascending"
+              items:
+                type: array
+                items:
+                  type: string
+                minItems: 2
+                maxItems: 2
+
+    OrderBookMessage:
+      type: object
+      description: Incremental order book message (100 levels)
+      properties:
+        topic:
+          type: string
+          example: ORDERBOOK
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: object
+          properties:
+            action:
+              type: string
+              enum: [SNAPSHOT, UPDATE]
+              description: "SNAPSHOT for initial full book, UPDATE for incremental changes"
+            bids:
+              type: array
+              description: "Bid updates [[price, size], ...]. size='0' means level removed."
+              items:
+                type: array
+                items:
+                  type: string
+                minItems: 2
+                maxItems: 2
+            asks:
+              type: array
+              description: "Ask updates [[price, size], ...]. size='0' means level removed."
+              items:
+                type: array
+                items:
+                  type: string
+                minItems: 2
+                maxItems: 2
+            number:
+              type: integer
+              format: int64
+              description: Sequence number of this update
+            prevNumber:
+              type: integer
+              format: int64
+              description: Sequence number of previous update (for consistency check)
+            timeStamp:
+              type: integer
+              format: int64
+              description: Order book update timestamp in milliseconds
+
+    IndexMessage:
+      type: object
+      description: Index price stream message
+      properties:
+        topic:
+          type: string
+          example: INDEX
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          type: array
+          description: Index price data
+          items:
+            type: object
+            properties:
+              symbol:
+                type: string
+                description: Futures trading pair symbol
+                example: BTC_USDT_PERP
+              indexPrice:
+                type: string
+                description: Index price
+              markPrice:
+                type: string
+                description: Mark price (used for liquidation calculation)
+              nextFundingRate:
+                type: string
+                description: Estimated next funding rate
+              nextFundingTime:
+                type: integer
+                format: int64
+                description: Next funding time in milliseconds
+              updateTime:
+                type: integer
+                format: int64
+                description: Update time in milliseconds
+
+    FuturesOrderMessage:
+      type: object
+      description: Futures order stream message
+      properties:
+        topic:
+          type: string
+          example: ORDER
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          $ref: '#/components/schemas/FuturesOrderRecord'
+
+    FuturesOrderRecord:
+      type: object
+      properties:
+        orderId:
+          type: integer
+          format: int64
+          description: Order ID
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        type:
+          type: string
+          enum: [LIMIT, MARKET_QTY, IOC, FOK, POSTONLY]
+          description: Order type
+        positionMode:
+          type: string
+          enum: [BUYSELL, OPENCLOSE]
+          description: "Position mode (one-way or hedge mode)"
+        isolatedMode:
+          type: string
+          enum: [CROSS, ISOLATED_BOTH, ISOLATED_LONG, ISOLATED_SHORT]
+          description: "Margin mode"
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Order side
+        positionSide:
+          type: string
+          enum: [BOTH, LONG, SHORT]
+          description: "Position side (BOTH for one-way mode, LONG/SHORT for hedge mode)"
+        price:
+          type: string
+          description: Order price
+        origSize:
+          type: string
+          description: "Original order quantity as submitted by user"
+        size:
+          type: string
+          description: "Actual order quantity (may be trimmed for reduce-only orders)"
+        amount:
+          type: string
+          description: "Market buy order amount (for MARKET_AMT orders)"
+        filledSize:
+          type: string
+          description: Filled quantity
+        filledAmount:
+          type: string
+          description: Filled amount (quote currency)
+        status:
+          type: string
+          enum: [OPEN, CLOSED]
+          description: "Order status (OPEN includes SUBMITTED/CONFIRMED/PARTIAL_FILLED, CLOSED includes FILLED/CANCELED/REJECTED)"
+        reduceOnly:
+          type: boolean
+          description: "Whether this order only reduces position (does not increase)"
+        clientOrderId:
+          type: string
+          description: Client order ID for deduplication
+        source:
+          type: string
+          enum: [MANUAL, API, SYSTEM, TRIGGER]
+          description: Order source
+        createTime:
+          type: integer
+          format: int64
+          description: Order creation time in milliseconds
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update time in milliseconds
+
+    FuturesFillMessage:
+      type: object
+      description: Futures fill stream message
+      properties:
+        topic:
+          type: string
+          example: FILL
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          $ref: '#/components/schemas/FuturesFillRecord'
+
+    FuturesFillRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Fill record ID
+        orderId:
+          type: integer
+          format: int64
+          description: Associated order ID
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: Trade direction
+        role:
+          type: string
+          enum: [TAKER, MAKER]
+          description: Participant role
+        price:
+          type: string
+          description: Execution price
+        size:
+          type: string
+          description: Fill quantity
+        fee:
+          type: string
+          description: Transaction fee
+        feeCoin:
+          type: string
+          description: Fee currency
+        feeType:
+          type: string
+          enum: [TRADING, LIQUIDATION]
+          description: "Fee type (TRADING for normal trade fee, LIQUIDATION for liquidation fee)"
+        timestamp:
+          type: integer
+          format: int64
+          description: Fill timestamp in milliseconds
+
+    FuturesBalanceMessage:
+      type: object
+      description: Futures balance stream message
+      properties:
+        topic:
+          type: string
+          example: BALANCE
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/CrossBalanceData'
+            - $ref: '#/components/schemas/IsolateBalanceData'
+          discriminator:
+            propertyName: type
+            mapping:
+              CROSS: '#/components/schemas/CrossBalanceData'
+              ISOLATE_LONG: '#/components/schemas/IsolateBalanceData'
+              ISOLATE_SHORT: '#/components/schemas/IsolateBalanceData'
+              ISOLATE_BOTH: '#/components/schemas/IsolateBalanceData'
+
+    CrossBalanceData:
+      type: object
+      description: Cross margin account balance data
+      properties:
+        type:
+          type: string
+          enum: [CROSS]
+          description: Balance type indicator
+        balances:
+          type: array
+          description: Balance list for all currencies
+          items:
+            type: object
+            properties:
+              coin:
+                type: string
+                description: Currency code
+                example: USDT
+              free:
+                type: string
+                description: Available balance
+              frozen:
+                type: string
+                description: Frozen balance
+              debts:
+                type: string
+                description: Debt amount
+        timestamp:
+          type: integer
+          format: int64
+          description: Balance update timestamp in milliseconds
+
+    IsolateBalanceData:
+      type: object
+      description: Isolated margin position balance data
+      properties:
+        type:
+          type: string
+          enum: [ISOLATE_LONG, ISOLATE_SHORT, ISOLATE_BOTH]
+          description: "Isolated margin type"
+        symbol:
+          type: string
+          description: Futures trading pair symbol for the isolated position
+          example: BTC_USDT_PERP
+        balances:
+          type: array
+          description: Balance list for this isolated position
+          items:
+            type: object
+            properties:
+              coin:
+                type: string
+                description: Currency code
+                example: USDT
+              free:
+                type: string
+                description: Available balance
+              frozen:
+                type: string
+                description: Frozen balance
+              debts:
+                type: string
+                description: Debt amount
+        timestamp:
+          type: integer
+          format: int64
+          description: Balance update timestamp in milliseconds
+
+    FuturesRiskMessage:
+      type: object
+      description: Futures risk state stream message
+      properties:
+        topic:
+          type: string
+          example: RISK
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/CrossRiskData'
+            - $ref: '#/components/schemas/IsolateRiskData'
+          discriminator:
+            propertyName: type
+            mapping:
+              CROSS: '#/components/schemas/CrossRiskData'
+              ISOLATE_LONG: '#/components/schemas/IsolateRiskData'
+              ISOLATE_SHORT: '#/components/schemas/IsolateRiskData'
+              ISOLATE_BOTH: '#/components/schemas/IsolateRiskData'
+
+    CrossRiskData:
+      type: object
+      description: Cross margin account risk data
+      properties:
+        type:
+          type: string
+          enum: [CROSS]
+          description: Risk type indicator
+        riskState:
+          type: string
+          description: "Risk state: TRADING, HOLDING, MERGING, LIQUIDATING, TAKEOVER"
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        updatedTime:
+          type: integer
+          format: int64
+          description: Risk state update time in milliseconds
+        extraInfo:
+          type: object
+          description: Additional risk information
+          properties:
+            accountEquity:
+              type: string
+              description: Account equity
+            totalMaintMargin:
+              type: string
+              description: Total maintenance margin requirement
+
+    IsolateRiskData:
+      type: object
+      description: Isolated margin position risk data
+      properties:
+        type:
+          type: string
+          enum: [ISOLATE_LONG, ISOLATE_SHORT, ISOLATE_BOTH]
+          description: "Isolated margin type"
+        symbol:
+          type: string
+          description: Futures trading pair symbol for the isolated position
+          example: BTC_USDT_PERP
+        riskState:
+          type: string
+          description: "Risk state: TRADING, HOLDING, MERGING, LIQUIDATING, TAKEOVER"
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        updatedTime:
+          type: integer
+          format: int64
+          description: Risk state update time in milliseconds
+        extraInfo:
+          type: object
+          description: Additional risk information
+          properties:
+            accountEquity:
+              type: string
+              description: Position equity
+            totalMaintMargin:
+              type: string
+              description: Maintenance margin requirement
+
+    FuturesPositionMessage:
+      type: object
+      description: Futures position stream message
+      properties:
+        topic:
+          type: string
+          example: POSITION
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        timestamp:
+          type: integer
+          format: int64
+          description: Message timestamp in milliseconds
+        data:
+          $ref: '#/components/schemas/FuturesPositionRecord'
+
+    FuturesPositionRecord:
+      type: object
+      properties:
+        positionId:
+          type: string
+          description: Position unique identifier
+        symbol:
+          type: string
+          description: Futures trading pair symbol
+          example: BTC_USDT_PERP
+        isolatedMode:
+          type: string
+          enum: [CROSS, ISOLATED_BOTH, ISOLATED_LONG, ISOLATED_SHORT]
+          description: "Margin mode"
+        positionSide:
+          type: string
+          enum: [LONG, SHORT]
+          description: Position direction
+        netSize:
+          type: string
+          description: "Net position size = sizeLong + sizeShort"
+        avgPrice:
+          type: string
+          description: "Average entry price = abs((amountLong + amountShort + amountSettled) / (sizeLong + sizeShort))"
+        sizeLong:
+          type: string
+          description: Cumulative long size (positive)
+        sizeShort:
+          type: string
+          description: Cumulative short size (negative)
+        amountLong:
+          type: string
+          description: Cumulative long cost (negative)
+        amountShort:
+          type: string
+          description: Cumulative short proceeds (positive)
+        amountSettled:
+          type: string
+          description: Cumulative settled amount
+        sizeLiquidated:
+          type: string
+          description: "Cumulative liquidated size (negative for long, positive for short)"
+        amountLiquidated:
+          type: string
+          description: "Cumulative liquidated amount (positive for long, negative for short)"
+        sizeTakeover:
+          type: string
+          description: Takeover size (in cases where position was taken over by system)
+        createTime:
+          type: integer
+          format: int64
+          description: Position creation time in milliseconds
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update time in milliseconds
+
+    PingMessage:
+      type: object
+      description: Server heartbeat ping
+      properties:
+        op:
+          type: string
+          example: PING
+        timestamp:
+          type: integer
+          format: int64
+          description: Server timestamp in milliseconds
+
+    PongMessage:
+      type: object
+      description: Client heartbeat pong response
+      properties:
+        op:
+          type: string
+          example: PONG
+        timestamp:
+          type: integer
+          format: int64
+          description: Timestamp from the PING message
+
+    AuthMessage:
+      type: object
+      description: Authentication message for private stream
+      properties:
+        op:
+          type: string
+          example: auth
+        args:
+          type: array
+          description: "[apiKey, timestamp, signature]"
+          items:
+            oneOf:
+              - type: string
+              - type: integer
+          minItems: 3
+          maxItems: 3
+          example: ["YOUR_API_KEY", 1655896754515, "3e901247350e744353f4a7a479fd67181184a627b119352ec1b7a432925e772c"]
+
+    SubscribeMessage:
+      type: object
+      description: Subscribe to a topic
+      properties:
+        op:
+          type: string
+          example: SUBSCRIBE
+        topic:
+          type: string
+          description: Topic name
+          enum: [TRADE, DEPTH, ORDERBOOK, INDEX, ORDER, FILL, BALANCE, RISK, POSITION]
+        symbol:
+          type: string
+          description: "Trading pair symbol (optional for BALANCE and RISK topics)"
+          example: BTC_USDT_PERP
+        limit:
+          type: integer
+          description: "Depth limit for DEPTH topic (optional, 1-100)"
+
+    UnsubscribeMessage:
+      type: object
+      description: Unsubscribe from a topic
+      properties:
+        op:
+          type: string
+          example: UNSUBSCRIBE
+        topic:
+          type: string
+          description: Topic name
+          enum: [TRADE, DEPTH, ORDERBOOK, INDEX, ORDER, FILL, BALANCE, RISK, POSITION]
+        symbol:
+          type: string
+          description: "Trading pair symbol (optional for BALANCE and RISK topics)"
+          example: BTC_USDT_PERP
+
+    ErrorMessage:
+      type: object
+      description: Error response message
+      properties:
+        event:
+          type: string
+          example: ERROR
+        mcode:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Error message description
+        timestamp:
+          type: integer
+          format: int64
+          description: Error timestamp in milliseconds
