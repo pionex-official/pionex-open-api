@@ -1356,12 +1356,44 @@ components:
           type: integer
           format: int64
           description: Number of grid levels
+        lossStopType:
+          type: string
+          description: "Stop loss mode: `price`, `profit_amount`, `profit_ratio`"
+          enum: [price, profit_amount, profit_ratio]
         lossStop:
           type: string
-          description: Stop loss price
+          description: |
+            Stop loss threshold. Interpretation depends on `lossStopType`:
+            - `price`: price value (e.g. `"40000"`)
+            - `profit_amount`: loss amount in quote currency (e.g. `"-50"`)
+            - `profit_ratio`: loss ratio (e.g. `"-0.1"` = -10%)
+        lossStopDelay:
+          type: integer
+          format: int64
+          description: Seconds to wait after stop loss condition is first met before executing. `0` means immediate.
+        profitStopType:
+          type: string
+          description: "Take profit mode: `price`, `profit_amount`, `profit_ratio`"
+          enum: [price, profit_amount, profit_ratio]
         profitStop:
           type: string
-          description: Take profit price
+          description: |
+            Take profit threshold. Interpretation depends on `profitStopType`:
+            - `price`: price value (e.g. `"55000"`)
+            - `profit_amount`: profit amount in quote currency (e.g. `"100"`)
+            - `profit_ratio`: profit ratio (e.g. `"0.1"` = 10%)
+        profitStopDelay:
+          type: integer
+          format: int64
+          description: Seconds to wait after take profit condition is first met before executing. `0` means immediate.
+        condition:
+          type: string
+          description: Trigger price set at creation (optional)
+          example: "45000"
+        conditionDirection:
+          type: string
+          description: "Trigger direction: `\"-1\"` price drops below condition, `\"1\"` price rises above condition"
+          enum: ["-1", "1"]
         baseTotalInvestment:
           type: string
           description: Total base currency investment
@@ -1578,12 +1610,58 @@ components:
           type: string
           description: Quote currency investment amount
           example: "1000"
+        lossStopType:
+          type: string
+          description: |
+            Stop loss mode:
+            `price` — trigger when market price reaches `lossStop`,
+            `profit_amount` — trigger when unrealized loss reaches `lossStop` amount,
+            `profit_ratio` — trigger when unrealized loss reaches `lossStop` ratio (e.g. `"-0.1"` = -10%)
+          enum: [price, profit_amount, profit_ratio]
         lossStop:
           type: string
-          description: Stop loss price (optional)
+          description: |
+            Stop loss threshold. Interpretation depends on `lossStopType`:
+            - `price`: price value (e.g. `"40000"`)
+            - `profit_amount`: loss amount in quote currency (e.g. `"-50"`)
+            - `profit_ratio`: loss ratio (e.g. `"-0.1"` = -10%)
+        lossStopDelay:
+          type: integer
+          format: int64
+          description: |
+            Seconds to wait after stop loss condition is first met before executing.
+            During the delay the condition must remain satisfied; if it recovers the timer resets.
+            Omit or set to `0` to trigger immediately.
+        profitStopType:
+          type: string
+          description: |
+            Take profit mode:
+            `price` — trigger when market price reaches `profitStop`,
+            `profit_amount` — trigger when realized profit reaches `profitStop` amount,
+            `profit_ratio` — trigger when realized profit reaches `profitStop` ratio (e.g. `"0.1"` = 10%)
+          enum: [price, profit_amount, profit_ratio]
         profitStop:
           type: string
-          description: Take profit price (optional)
+          description: |
+            Take profit threshold. Interpretation depends on `profitStopType`:
+            - `price`: price value (e.g. `"55000"`)
+            - `profit_amount`: profit amount in quote currency (e.g. `"100"`)
+            - `profit_ratio`: profit ratio (e.g. `"0.1"` = 10%)
+        profitStopDelay:
+          type: integer
+          format: int64
+          description: |
+            Seconds to wait after take profit condition is first met before executing.
+            During the delay the condition must remain satisfied; if it recovers the timer resets.
+            Omit or set to `0` to trigger immediately.
+        condition:
+          type: string
+          description: Trigger price — bot starts only when price crosses this level (optional)
+          example: "45000"
+        conditionDirection:
+          type: string
+          description: "Trigger direction: `\"-1\"` price drops below condition, `\"1\"` price rises above condition"
+          enum: ["-1", "1"]
         slippage:
           type: string
           description: "Open position slippage tolerance (e.g. \"0.01\" = 1%)"
