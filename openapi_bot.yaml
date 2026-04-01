@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Pionex Bot Open API - Futures Grid
+  title: Pionex Bot Open API
   description: |
-    Pionex cryptocurrency exchange Bot RESTful API - Futures Grid Bot endpoints.
+    Pionex cryptocurrency exchange Bot RESTful API - Futures Grid & Spot Grid Bot endpoints.
 
     # General Info
 
@@ -68,12 +68,19 @@ info:
 
     **Endpoints requiring `Bot reading` permission:**
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
+    - `GET /api/v1/bot/orders/spotGrid/order` — Get spot grid order
+    - `GET /api/v1/bot/orders/spotGrid/aiStrategy` — Get spot grid AI strategy
 
     **Endpoints requiring `Bot trading` permission:**
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
     - `POST /api/v1/bot/orders/futuresGrid/adjustParams` — Adjust futures grid (add investment / modify range)
     - `POST /api/v1/bot/orders/futuresGrid/reduce` — Reduce futures grid position
     - `POST /api/v1/bot/orders/futuresGrid/cancel` — Cancel futures grid order
+    - `POST /api/v1/bot/orders/spotGrid/create` — Create spot grid order
+    - `POST /api/v1/bot/orders/spotGrid/adjustParams` — Adjust spot grid parameters
+    - `POST /api/v1/bot/orders/spotGrid/investIn` — Add investment to spot grid
+    - `POST /api/v1/bot/orders/spotGrid/cancel` — Cancel spot grid order
+    - `POST /api/v1/bot/orders/spotGrid/profit` — Extract profit from spot grid
   version: 1.0.0
   contact:
     name: Pionex API Support
@@ -88,6 +95,8 @@ security: []
 tags:
   - name: Futures Grid
     description: Futures Grid Bot management (private)
+  - name: Spot Grid
+    description: Spot Grid Bot management (private)
 
 paths:
   /api/v1/bot/orders/futuresGrid/order:
@@ -249,6 +258,250 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # Spot Grid
+  # -------------------------------------------------------------------------
+
+  /api/v1/bot/orders/spotGrid/order:
+    get:
+      tags: [Spot Grid]
+      summary: Get spot grid order
+      description: "Query a spot grid bot order by ID. Weight: 1."
+      operationId: getSpotGridOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: buOrderId
+          in: query
+          required: true
+          description: Bot order ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SpotGridOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/aiStrategy:
+    get:
+      tags: [Spot Grid]
+      summary: Get spot grid AI strategy
+      description: "Query AI-recommended grid strategy parameters for a trading pair. Weight: 1."
+      operationId: getSpotGridAiStrategy
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: base
+          in: query
+          required: true
+          description: Base currency (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: true
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SpotGridAiStrategy'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/create:
+    post:
+      tags: [Spot Grid]
+      summary: Create spot grid order
+      description: "Create a new spot grid bot order. Weight: 1."
+      operationId: createSpotGridOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSpotGridRequest'
+      responses:
+        '200':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SpotGridOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/adjustParams:
+    post:
+      tags: [Spot Grid]
+      summary: Adjust spot grid parameters
+      description: "Modify grid range (top/bottom/row) or adjust investment for a running spot grid order. Weight: 1."
+      operationId: adjustSpotGridParams
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustSpotGridParamsRequest'
+      responses:
+        '200':
+          description: Adjustment applied successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          action_id:
+                            type: string
+                            description: Adjustment action ID
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/investIn:
+    post:
+      tags: [Spot Grid]
+      summary: Add investment to spot grid
+      description: "Add additional investment to a running spot grid order. Weight: 1."
+      operationId: investInSpotGrid
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvestInSpotGridRequest'
+      responses:
+        '200':
+          description: Investment added successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          action_id:
+                            type: string
+                            description: Investment action ID
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/cancel:
+    post:
+      tags: [Spot Grid]
+      summary: Cancel spot grid order
+      description: "Close and cancel a spot grid bot order. Weight: 1."
+      operationId: cancelSpotGridOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSpotGridRequest'
+      responses:
+        '200':
+          description: Order cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/profit:
+    post:
+      tags: [Spot Grid]
+      summary: Extract profit from spot grid
+      description: "Extract accumulated grid profit from a running spot grid order. Weight: 1."
+      operationId: profitSpotGrid
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfitSpotGridRequest'
+      responses:
+        '200':
+          description: Profit extracted successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TransferRecord'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1035,3 +1288,419 @@ components:
         closeSlippage:
           type: string
           description: "Close position slippage (e.g. \"0.01\" = 1%)"
+
+    # =========================================================================
+    # Spot Grid schemas
+    # =========================================================================
+
+    SpotGridOrder:
+      type: object
+      description: Spot grid bot order (wraps OrderResult with GridV5OrderData)
+      properties:
+        buOrderType:
+          type: string
+          description: Order type (always `grid_v5` for spot grid)
+          example: grid_v5
+        buOrderId:
+          type: string
+          description: Bot order ID
+        userId:
+          type: string
+          description: User ID
+        keyId:
+          type: string
+          description: API Key ID
+        exchange:
+          type: string
+          description: Exchange identifier
+          example: pionex.v2
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        status:
+          type: string
+          description: Order status
+        createTime:
+          type: integer
+          format: int64
+          description: Creation timestamp in milliseconds
+        closeTime:
+          type: integer
+          format: int64
+          description: Close timestamp in milliseconds
+        note:
+          type: string
+          description: Order note
+        buOrderData:
+          $ref: '#/components/schemas/SpotGridOrderData'
+
+    SpotGridOrderData:
+      type: object
+      description: Spot grid order detail data (GridV5OrderData)
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        top:
+          type: string
+          description: Grid upper price
+        bottom:
+          type: string
+          description: Grid lower price
+        row:
+          type: integer
+          format: int64
+          description: Number of grid levels
+        lossStop:
+          type: string
+          description: Stop loss price
+        profitStop:
+          type: string
+          description: Take profit price
+        baseTotalInvestment:
+          type: string
+          description: Total base currency investment
+        quoteTotalInvestment:
+          type: string
+          description: Total quote currency investment
+        gridType:
+          type: string
+          description: "Grid spacing type: `arithmetic` or `geometric`"
+          enum: [arithmetic, geometric]
+        openPrice:
+          type: string
+          description: Market price at order creation
+        earnCoin:
+          type: string
+          description: Profit-earning currency (always quote)
+        trend:
+          type: string
+          description: "Grid direction (always `long` for spot grid)"
+          example: long
+        status:
+          type: string
+          description: |
+            Bot status:
+            `prepare`, `lock_currency`, `init_grid`, `running`,
+            `destroy_grid`, `unlock_currency`, `canceled`
+        createTime:
+          type: integer
+          format: int64
+          description: Status change timestamp in milliseconds
+        baseInvestment:
+          type: string
+          description: Actual base investment amount
+        quoteInvestment:
+          type: string
+          description: Actual quote investment amount
+        perVolume:
+          type: string
+          description: Volume per grid level
+        baseAmount:
+          type: string
+          description: Current base balance in bot account
+        quoteAmount:
+          type: string
+          description: Current quote balance in bot account
+        realizedProfit:
+          type: string
+          description: Total realized profit (grid profit + float P&L)
+        gridProfit:
+          type: string
+          description: Accumulated grid profit
+        totalCostInBase:
+          type: string
+          description: Total cost in base currency
+        totalCostInQuote:
+          type: string
+          description: Total cost in quote currency
+        totalFeeInBase:
+          type: string
+          description: Total fee in base currency
+        totalFeeInQuote:
+          type: string
+          description: Total fee in quote currency
+        averageCost:
+          type: string
+          description: Average cost price
+        profitWithdrawn:
+          type: string
+          description: Total profit extracted so far
+        reasonBy:
+          type: string
+          description: |
+            Close reason:
+            `user_cancel`, `loss_stop`, `profit_stop`, `not_enough_balance`, `create_failed`
+        investCoin:
+          type: string
+          description: "Investment currency: `USDT` or quote currency"
+        closeSellModel:
+          type: string
+          description: |
+            Close sell mode:
+            `TO_QUOTE` - Return base+quote as-is,
+            `TO_USDT` - Sell base to quote on close
+          enum: [TO_QUOTE, TO_USDT]
+        slippage:
+          type: string
+          description: "Open position slippage (e.g. \"0.01\" = 1%)"
+        pausePrice:
+          type: string
+          description: Price when paused
+        profitAutoReinvest:
+          type: boolean
+          description: Whether profit auto-reinvest is enabled
+        breakEvenWithoutGridProfit:
+          type: string
+          description: Break-even price (excluding grid profit)
+        breakEvenWithGridProfit:
+          type: string
+          description: Break-even price (including grid profit)
+        openQuotePrice:
+          type: string
+          description: Quote/USDT price at order creation
+
+    SpotGridAiStrategy:
+      type: object
+      description: AI-recommended spot grid strategy
+      properties:
+        annualized:
+          type: string
+          description: Annualized return of the recommended strategy
+        totalApr:
+          type: string
+          description: Total APR
+        high:
+          type: string
+          description: Recommended grid upper price
+        low:
+          type: string
+          description: Recommended grid lower price
+        gridCount:
+          type: integer
+          description: Recommended number of grid levels
+        strategyId:
+          type: string
+          description: Strategy ID
+        volatility:
+          type: string
+          description: Market volatility indicator
+        maxDrawDown:
+          type: string
+          description: Maximum drawdown
+        options:
+          type: array
+          description: List of strategy options by time period
+          items:
+            $ref: '#/components/schemas/SpotGridAiStrategyOption'
+
+    SpotGridAiStrategyOption:
+      type: object
+      description: AI strategy option for a specific backtesting period
+      properties:
+        period:
+          type: integer
+          description: "Backtesting period in days (e.g. 7, 14, 30)"
+        annualized:
+          type: string
+          description: Annualized return for this period
+        totalApr:
+          type: string
+          description: Total APR for this period
+        high:
+          type: string
+          description: Grid upper price for this period
+        low:
+          type: string
+          description: Grid lower price for this period
+        gridCount:
+          type: integer
+          description: Number of grid levels for this period
+        maxDrawDown:
+          type: string
+          description: Maximum drawdown for this period
+        volatility:
+          type: string
+          description: Volatility for this period
+        suitabilityMin:
+          type: integer
+          description: Minimum suitability score
+        suitabilityMax:
+          type: integer
+          description: Maximum suitability score
+
+    CreateSpotGridRequest:
+      type: object
+      required: [base, quote, buOrderData]
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        note:
+          type: string
+          description: Optional order note
+        buOrderData:
+          $ref: '#/components/schemas/CreateSpotGridOrderData'
+
+    CreateSpotGridOrderData:
+      type: object
+      required: [top, bottom, row, gridType, quoteTotalInvestment]
+      properties:
+        top:
+          type: string
+          description: Grid upper price
+          example: "50000"
+        bottom:
+          type: string
+          description: Grid lower price
+          example: "40000"
+        row:
+          type: integer
+          format: int64
+          description: Number of grid levels (2–200)
+          example: 20
+        gridType:
+          type: string
+          description: "Grid spacing type: `arithmetic` (equal difference) or `geometric` (equal ratio)"
+          enum: [arithmetic, geometric]
+          example: "arithmetic"
+        quoteTotalInvestment:
+          type: string
+          description: Quote currency investment amount
+          example: "1000"
+        lossStop:
+          type: string
+          description: Stop loss price (optional)
+        profitStop:
+          type: string
+          description: Take profit price (optional)
+        slippage:
+          type: string
+          description: "Open position slippage tolerance (e.g. \"0.01\" = 1%)"
+        closeSellModel:
+          type: string
+          description: |
+            Close sell mode on cancellation:
+            `TO_QUOTE` - Return base+quote as-is (default),
+            `TO_USDT` - Sell base to quote on close
+          enum: [TO_QUOTE, TO_USDT]
+
+    AdjustSpotGridParamsRequest:
+      type: object
+      required: [buOrderId]
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        top:
+          type: string
+          description: New grid upper price
+        bottom:
+          type: string
+          description: New grid lower price
+        row:
+          type: integer
+          format: int32
+          description: New number of grid levels
+        quoteInvest:
+          type: string
+          description: Additional quote investment amount
+        investCoin:
+          type: string
+          description: Investment currency for the additional amount
+
+    InvestInSpotGridRequest:
+      type: object
+      required: [buOrderId, quoteInvest]
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        quoteInvest:
+          type: string
+          description: Additional investment amount (in quote or specified investCoin)
+          example: "100"
+        investCoin:
+          type: string
+          description: "Investment currency: quote currency (default) or base currency"
+
+    CancelSpotGridRequest:
+      type: object
+      required: [buOrderId]
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        closeSellModel:
+          type: string
+          description: |
+            Close sell mode:
+            `TO_QUOTE` - Return base+quote as-is (default),
+            `TO_USDT` - Sell base to quote on close
+          enum: [TO_QUOTE, TO_USDT]
+        slippage:
+          type: string
+          description: "Close position slippage (e.g. \"0.01\" = 1%)"
+
+    ProfitSpotGridRequest:
+      type: object
+      required: [buOrderId, coin, amount]
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        coin:
+          type: string
+          description: Currency to extract (e.g. USDT)
+          example: USDT
+        amount:
+          type: string
+          description: Amount to extract
+          example: "50"
+
+    TransferRecord:
+      type: object
+      description: Record of a profit extraction transfer
+      properties:
+        transferId:
+          type: string
+          description: Transfer ID
+        buOrderId:
+          type: string
+          description: Bot order ID
+        type:
+          type: string
+          description: "Transfer type (e.g. `profit`)"
+        direction:
+          type: string
+          description: "Transfer direction: `out` (extract from bot)"
+          example: out
+        coin:
+          type: string
+          description: Transfer currency
+        amount:
+          type: string
+          description: Transfer amount
+        amountC:
+          type: string
+          description: Transfer amount in platform currency
+        status:
+          type: string
+          description: Transfer status
+        createTime:
+          type: integer
+          format: int64
+          description: Transfer timestamp in milliseconds
+        error:
+          type: string
+          description: Error message (if failed)
