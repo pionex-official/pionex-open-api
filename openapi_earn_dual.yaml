@@ -4,6 +4,8 @@ info:
   description: |
     Pionex Dual Investment Open API.
 
+    > **Note:** The Dual Investment API is currently in **Beta**. If you would like to use it, please contact us at [open@pionex.com](mailto:open@pionex.com).
+
     # General Info
 
     ## Basic Info
@@ -160,14 +162,24 @@ paths:
       tags: [Dual]
       summary: List open products
       description: |
-        Returns currently open Dual Investment products for a specific trading pair and direction type. Weight: 1.
+        Returns currently open Dual Investment products for a specific trading pair and type. Weight: 1.
 
-        - `type=UP`: products that pay out if price goes up (call-like)
-        - `type=DOWN`: products that pay out if price goes down (put-like)
+        **Type semantics:**
+        - `DUAL_BASE`: invest in base currency (e.g. BTC); if price rises above strike at expiry, principal + yield are returned in base currency, otherwise converted to quote currency
+        - `DUAL_CURRENCY`: invest in quote/investment currency (e.g. USDT); if price falls below strike at expiry, principal + yield are returned in quote currency, otherwise converted to base currency
 
-        Example request:
+        **Quote currency rules:**
+        - `base=BTC` or `base=ETH`: use `quote=USDXO`, `currency=USDT` or `USDC`
+        - All other base currencies: use `quote=USDT`, `currency=USDT`
+
+        Example request (BTC, DUAL_BASE):
         ```
-        GET /api/v1/earn/dual/openProducts?base=BTC&quote=USDT&type=UP
+        GET /api/v1/earn/dual/openProducts?base=BTC&quote=USDXO&currency=USDT&type=DUAL_BASE
+        ```
+
+        Example request (XRP, DUAL_BASE):
+        ```
+        GET /api/v1/earn/dual/openProducts?base=XRP&quote=USDT&currency=USDT&type=DUAL_BASE
         ```
 
         Example response:
@@ -177,19 +189,19 @@ paths:
           "data": {
             "products": [
               {
-                "productId": "BTC-USDT-260402-70000-C-USDT",
+                "productId": "BTC-USDXO-260401-69000-C-USDT",
                 "base": "BTC",
-                "quote": "USDT",
+                "quote": "USDXO",
                 "currency": "USDT",
-                "type": "UP",
-                "createTime": 1774900000000,
-                "expireTime": 1775160000000,
-                "strike": "70000",
+                "type": "DUAL_BASE",
+                "createTime": 1774686600000,
+                "expireTime": 1775030400000,
+                "strike": "69000",
                 "expired": false
               }
             ]
           },
-          "timestamp": 1774959497526
+          "timestamp": 1775025855477
         }
         ```
       operationId: dualProducts
@@ -198,29 +210,30 @@ paths:
         - name: base
           in: query
           required: true
-          description: "Base currency (e.g. `BTC`, `ETH`)"
+          description: "Base currency (e.g. `BTC`, `ETH`, `XRP`)"
           schema:
             type: string
             example: BTC
         - name: quote
           in: query
           required: true
-          description: "Quote currency (e.g. `USDT`, `USDC`, `USD`, `USDXO`)"
+          description: "Quote currency. Use `USDXO` for BTC/ETH; use `USDT` for all other base currencies."
           schema:
             type: string
-            example: USDT
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
         - name: type
           in: query
           required: true
-          description: "Dual investment direction: `UP` (bullish) or `DOWN` (bearish)"
+          description: "`DUAL_BASE` — invest in base currency; `DUAL_CURRENCY` — invest in quote/investment currency"
           schema:
             type: string
-            enum: [UP, DOWN]
-            example: UP
+            enum: [DUAL_BASE, DUAL_CURRENCY]
+            example: DUAL_BASE
         - name: currency
           in: query
           required: false
-          description: "Investment currency filter (e.g. `USDT`, `BTC`). Omit to return all currencies."
+          description: "Investment currency filter. For BTC/ETH pairs: `USDT` or `USDC`. For other pairs: `USDT`."
           schema:
             type: string
             example: USDT
@@ -246,20 +259,23 @@ paths:
       description: |
         Returns the latest yield rate and investability status for Dual Investment products. Weight: 1.
 
-        **One of the following parameter combinations is required:**
-        - `productIds`: comma-separated product ID list
-        - `base` + `quote`: returns prices for all products under that pair
+        **All three parameters are required:** `base`, `quote`, and `productIds`.
+        Omitting any one of them will return a `DUAL_PARAMETER_ERROR`.
 
-        Passing only `base` without `quote` (or vice versa) will return a `DUAL_PARAMETER_ERROR`.
+        `productIds` is a comma-separated list of product IDs. Works for both `USDT` and `USDXO` quoted pairs.
 
-        Example request (by product IDs):
+        When `canInvest` is `false`, `profit` and `baseSize` will be empty strings.
+
+        > **Workflow note:** Always call this endpoint before placing an order. The `profit` value returned here must be passed as-is to `POST /api/v1/earn/dual/invest`. Submitting a stale or mismatched `profit` will be rejected.
+
+        Example request (USDT pair):
         ```
-        GET /api/v1/earn/dual/prices?productIds=BTC-USDT-260402-70000-C-USDT,BTC-USDT-260402-65000-P-USDT
+        GET /api/v1/earn/dual/prices?base=LRC&quote=USDT&productIds=LRC-USDT-260410-0.03-C-USDT,LRC-USDT-260410-0.02-C-USDT
         ```
 
-        Example request (by trading pair):
+        Example request (USDXO pair):
         ```
-        GET /api/v1/earn/dual/prices?base=BTC&quote=USDT
+        GET /api/v1/earn/dual/prices?base=ETH&quote=USDXO&productIds=ETH-USDXO-260410-3000-C-USDT,ETH-USDXO-260410-2900-C-USDT
         ```
 
         Example response:
@@ -269,15 +285,22 @@ paths:
           "data": {
             "products": [
               {
-                "productId": "BTC-USDT-260402-70000-C-USDT",
+                "productId": "LRC-USDT-260410-0.02-C-USDT",
                 "canInvest": true,
-                "profit": "0.0215",
-                "baseSize": "0.001",
-                "updateTime": 1774959429596
+                "profit": "0.01242",
+                "baseSize": "8000000",
+                "updateTime": 1775026225630
+              },
+              {
+                "productId": "LRC-USDT-260410-0.03-C-USDT",
+                "canInvest": false,
+                "profit": "0",
+                "baseSize": "",
+                "updateTime": 0
               }
             ]
           },
-          "timestamp": 1774959429596
+          "timestamp": 1775026244892
         }
         ```
       operationId: dualPrices
@@ -285,25 +308,26 @@ paths:
       parameters:
         - name: base
           in: query
-          required: false
-          description: "Base currency (e.g. `BTC`). Must be used together with `quote`."
+          required: true
+          description: "Base currency (e.g. `BTC`, `ETH`, `LRC`)"
           schema:
             type: string
-            example: BTC
+            example: ETH
         - name: quote
           in: query
-          required: false
-          description: "Quote currency (e.g. `USDT`). Must be used together with `base`."
+          required: true
+          description: "Quote currency. Use `USDXO` for BTC/ETH pairs; use `USDT` for all other base currencies."
           schema:
             type: string
-            example: USDT
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
         - name: productIds
           in: query
-          required: false
-          description: "Comma-separated product ID list (e.g. `BTC-USDT-260402-70000-C-USDT,BTC-USDT-260402-65000-P-USDT`). Use as an alternative to `base`+`quote`."
+          required: true
+          description: "Comma-separated product ID list. Multiple IDs are supported (e.g. `ETH-USDXO-260410-3000-C-USDT,ETH-USDXO-260410-2900-C-USDT`). Obtain IDs from `/openProducts`."
           schema:
             type: string
-            example: BTC-USDT-260402-70000-C-USDT
+            example: ETH-USDXO-260410-3000-C-USDT,ETH-USDXO-260410-2900-C-USDT
       responses:
         '200':
           description: Successful response
@@ -326,11 +350,18 @@ paths:
       description: |
         Returns the real-time index price for a Dual Investment underlying asset. Weight: 1.
 
+        Both `base` and `quote` are required. Works for both `USDT` and `USDXO` quoted pairs.
+
         The index price is the reference price used at settlement to determine whether the strike price was hit.
 
-        Example request:
+        Example request (USDXO pair):
         ```
-        GET /api/v1/earn/dual/index?base=BTC&quote=USDT
+        GET /api/v1/earn/dual/index?base=BTC&quote=USDXO
+        ```
+
+        Example request (USDT pair):
+        ```
+        GET /api/v1/earn/dual/index?base=LRC&quote=USDT
         ```
 
         Example response:
@@ -338,12 +369,12 @@ paths:
         {
           "result": true,
           "data": {
-            "index": "66717.41",
+            "index": "69142.6",
             "base": "BTC",
-            "quote": "USDT",
-            "updateTime": 1774960122854
+            "quote": "USDXO",
+            "updateTime": 1775025942486
           },
-          "timestamp": 1774960123279
+          "timestamp": 1775025942754
         }
         ```
       operationId: dualIndex
@@ -351,18 +382,19 @@ paths:
       parameters:
         - name: base
           in: query
-          required: false
-          description: "Base currency (e.g. `BTC`, `ETH`)"
+          required: true
+          description: "Base currency (e.g. `BTC`, `ETH`, `LRC`)"
           schema:
             type: string
             example: BTC
         - name: quote
           in: query
-          required: false
-          description: "Quote currency (e.g. `USDT`)"
+          required: true
+          description: "Quote currency. Use `USDXO` for BTC/ETH pairs; use `USDT` for all other base currencies."
           schema:
             type: string
-            example: USDT
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
       responses:
         '200':
           description: Successful response
@@ -388,9 +420,16 @@ paths:
         The delivery price is the index price recorded at the exact moment of each product's expiry,
         used to determine the settlement direction (base or quote currency payout).
 
-        Example request:
+        `base` is required. `quote` is optional but recommended to narrow results — use `USDXO` for BTC/ETH pairs and `USDT` for all other base currencies.
+
+        Example request (BTC/USDXO):
         ```
-        GET /api/v1/earn/dual/deliveryPrices?base=BTC&quote=USDT
+        GET /api/v1/earn/dual/deliveryPrices?base=BTC&quote=USDXO
+        ```
+
+        Example request (XRP/USDT):
+        ```
+        GET /api/v1/earn/dual/deliveryPrices?base=XRP&quote=USDT
         ```
 
         Example response:
@@ -400,13 +439,13 @@ paths:
           "data": {
             "prices": [
               {
-                "delivery": "67500.00",
-                "date": "2026-04-02",
-                "deliveryTime": 1743580800000
+                "delivery": "69142.6",
+                "date": "2026-04-01",
+                "deliveryTime": 1775030400000
               }
             ]
           },
-          "timestamp": 1774960123846
+          "timestamp": 1775026529937
         }
         ```
       operationId: deliveryPrices
@@ -414,18 +453,19 @@ paths:
       parameters:
         - name: base
           in: query
-          required: false
-          description: "Base currency (e.g. `BTC`, `ETH`)"
+          required: true
+          description: "Base currency (e.g. `BTC`, `XRP`)"
           schema:
             type: string
             example: BTC
         - name: quote
           in: query
           required: false
-          description: "Quote currency (e.g. `USDT`)"
+          description: "Quote currency filter. Use `USDXO` for BTC/ETH pairs; use `USDT` for all other base currencies."
           schema:
             type: string
-            example: USDT
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
         - name: startTime
           in: query
           required: false
@@ -433,7 +473,7 @@ paths:
           schema:
             type: integer
             format: int64
-            example: 1743494400000
+            example: 1774944000000
         - name: endTime
           in: query
           required: false
@@ -441,7 +481,7 @@ paths:
           schema:
             type: integer
             format: int64
-            example: 1743580800000
+            example: 1775030400000
       responses:
         '200':
           description: Successful response
@@ -523,16 +563,18 @@ paths:
       description: |
         Creates a new Dual Investment order. Requires `Earn` permission. Weight: 1.
 
-        Provide either `baseAmount` (invest in base currency) or `currencyAmount` (invest in quote/investment currency), not both.
+        Provide either `baseAmount` (invest in base currency) or `currencyAmount` (invest in investment currency), not both.
+
+        > **Workflow:** Call `GET /api/v1/earn/dual/prices` first to obtain the current `profit` value, then pass it unchanged to this endpoint. The `profit` field must match the live price — a stale or mismatched value will be rejected.
 
         Example request body:
         ```json
         {
           "base": "BTC",
-          "productId": "BTC-USDT-260402-70000-C-USDT",
+          "productId": "BTC-USDXO-260402-68000-P-USDT",
           "clientDualId": "my-order-001",
           "currencyAmount": "100",
-          "profit": "0.0215"
+          "profit": "0.0039"
         }
         ```
 
@@ -542,9 +584,9 @@ paths:
           "result": true,
           "data": {
             "clientDualId": "my-order-001",
-            "state": "INVESTING"
+            "state": "CONFIRMED"
           },
-          "timestamp": 1774959429596
+          "timestamp": 1775027817297
         }
         ```
       operationId: dualInvest
@@ -580,11 +622,16 @@ paths:
       description: |
         Revokes a pending Dual Investment order before it is matched. Requires `Earn` permission. Weight: 1.
 
+        Parameters are passed as a JSON request body, not query string.
         Only orders in a pending/unmatched state can be revoked.
 
-        Example request:
-        ```
-        DELETE /api/v1/earn/dual/invest?base=BTC&clientDualId=my-order-001&timestamp=1774959429596
+        Example request body:
+        ```json
+        {
+          "base": "BTC",
+          "productId": "BTC-USDXO-260402-68000-P-USDT",
+          "clientDualId": "my-order-001"
+        }
         ```
 
         Example response:
@@ -594,7 +641,7 @@ paths:
           "data": {
             "clientDualId": "my-order-001"
           },
-          "timestamp": 1774959429596
+          "timestamp": 1775027817297
         }
         ```
       operationId: dualRevokeInvest
@@ -602,27 +649,12 @@ paths:
         - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Timestamp'
-        - name: base
-          in: query
-          required: false
-          description: "Base currency (e.g. `BTC`)"
-          schema:
-            type: string
-            example: BTC
-        - name: clientDualId
-          in: query
-          required: false
-          description: Client-assigned dual investment order ID
-          schema:
-            type: string
-            example: my-order-001
-        - name: productId
-          in: query
-          required: false
-          description: Product ID
-          schema:
-            type: string
-            example: BTC-USDT-260402-70000-C-USDT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualRevokeInvestRequest'
       responses:
         '200':
           description: Order revoked successfully
@@ -691,7 +723,7 @@ paths:
 
         Example request:
         ```
-        GET /api/v1/earn/dual/records?base=BTC&quote=USDT&limit=10&timestamp=1774959429596
+        GET /api/v1/earn/dual/records?base=BTC&quote=USDXO&limit=10&endTime=1775027817297&timestamp=1775027817297
         ```
       operationId: dualInvestRecords
       security:
@@ -735,12 +767,12 @@ paths:
             example: 1743494400000
         - name: endTime
           in: query
-          required: false
+          required: true
           description: End timestamp in milliseconds
           schema:
             type: integer
             format: int64
-            example: 1774959429596
+            example: 1775027817297
         - name: limit
           in: query
           required: false
@@ -957,8 +989,8 @@ components:
       properties:
         productId:
           type: string
-          description: "Unique product ID. Format: `{BASE}-{QUOTE}-{YYMMDD}-{STRIKE}-{C|P}-{CURRENCY}`"
-          example: BTC-USDT-260402-70000-C-USDT
+          description: "Unique product ID. Format: `{BASE}-{QUOTE}-{YYMMDD}-{STRIKE}-{C|P}-{CURRENCY}`. `C` = DUAL_BASE, `P` = DUAL_CURRENCY."
+          example: BTC-USDXO-260401-69000-C-USDT
         base:
           type: string
           description: Base currency
@@ -973,9 +1005,9 @@ components:
           example: USDT
         type:
           type: string
-          description: "`UP` — pays out in base currency if price rises above strike; `DOWN` — pays out in quote currency if price falls below strike"
-          enum: [UP, DOWN]
-          example: UP
+          description: "`DUAL_BASE` — invest in base currency; `DUAL_CURRENCY` — invest in quote/investment currency"
+          enum: [DUAL_BASE, DUAL_CURRENCY]
+          example: DUAL_BASE
         createTime:
           type: integer
           format: int64
@@ -1150,10 +1182,27 @@ components:
           example: my-order-001
         state:
           type: string
-          description: Investment state after creation
-          example: INVESTING
+          description: Investment state after creation (e.g. `CONFIRMED`)
+          example: CONFIRMED
 
     # ─── Dual Revoke Invest ──────────────────────────────────
+    DualRevokeInvestRequest:
+      type: object
+      required: [base, productId, clientDualId]
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        productId:
+          type: string
+          description: Product ID of the order to revoke
+          example: BTC-USDXO-260402-68000-P-USDT
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+          example: my-order-001
+
     DualRevokeInvestData:
       type: object
       properties:
@@ -1203,9 +1252,9 @@ components:
           example: BTC-USDT-260402-70000-C-USDT
         type:
           type: string
-          description: "Dual investment direction: `UP` or `DOWN`"
-          enum: [UP, DOWN]
-          example: UP
+          description: "`DUAL_BASE` — invest in base currency; `DUAL_CURRENCY` — invest in quote/investment currency"
+          enum: [DUAL_BASE, DUAL_CURRENCY]
+          example: DUAL_BASE
         base:
           type: string
           description: Base currency
@@ -1282,6 +1331,7 @@ components:
     # ─── Dual Collect ────────────────────────────────────────
     DualCollectRequest:
       type: object
+      required: [base, clientDualId, productId]
       properties:
         base:
           type: string
@@ -1294,7 +1344,7 @@ components:
         productId:
           type: string
           description: Product ID
-          example: BTC-USDT-260402-70000-C-USDT
+          example: BTC-USDXO-260402-68000-P-USDT
 
     DualCollectData:
       type: object
