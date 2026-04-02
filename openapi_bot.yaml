@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Pionex Bot Open API - Futures Grid
+  title: Pionex Bot Open API
   description: |
-    Pionex cryptocurrency exchange Bot RESTful API - Futures Grid Bot endpoints.
+    Pionex cryptocurrency exchange Bot RESTful API - Bot Order List & Futures Grid Bot endpoints.
 
     # General Info
 
@@ -67,6 +67,7 @@ info:
     Each API Key can be configured with **Bot reading** and/or **Bot trading** permissions. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
 
     **Endpoints requiring `Bot reading` permission:**
+    - `GET /api/v1/bot/orders` — Get bot order list
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
 
     **Endpoints requiring `Bot trading` permission:**
@@ -86,10 +87,72 @@ servers:
 security: []
 
 tags:
+  - name: Bot Orders
+    description: Bot order list query (private)
   - name: Futures Grid
     description: Futures Grid Bot management (private)
 
 paths:
+  /api/v1/bot/orders:
+    get:
+      tags: [Bot Orders]
+      summary: Get bot order list
+      description: "Query bot order list with optional filters by order type, status, and trading pair. Supports pagination. Weight: 1."
+      operationId: getBotOrders
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: status
+          in: query
+          description: |
+            Order status filter:
+            `running` - Running orders (default),
+            `canceled` - Closed/cancelled orders
+          schema:
+            type: string
+            default: running
+        - name: base
+          in: query
+          description: Base currency filter (e.g. BTC)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          description: Quote currency filter (e.g. USDT)
+          schema:
+            type: string
+        - name: pageToken
+          in: query
+          description: Pagination token (from `nextPageToken` or `previousPageToken` in response)
+          schema:
+            type: string
+        - name: buOrderTypes
+          in: query
+          description: |
+            Order type filter. Can pass multiple values. If omitted, returns all types.
+            Supported values: `futures_grid`, `spot_grid`, `smart_copy`.
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BotOrderListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /api/v1/bot/orders/futuresGrid/order:
     get:
       tags: [Futures Grid]
@@ -318,6 +381,99 @@ components:
         timestamp:
           type: integer
           format: int64
+
+    BotOrderListResponse:
+      type: object
+      description: Bot order list response with pagination
+      properties:
+        nextPageToken:
+          type: string
+          nullable: true
+          description: Token to fetch the next page
+        previousPageToken:
+          type: string
+          nullable: true
+          description: Token to fetch the previous page
+        results:
+          type: array
+          description: List of bot orders
+          items:
+            $ref: '#/components/schemas/BotOrder'
+
+    BotOrder:
+      type: object
+      description: Bot order result
+      properties:
+        buOrderType:
+          type: string
+          description: |
+            Bot order type. Supported values: `futures_grid`, `spot_grid`, `smart_copy`.
+        buOrderId:
+          type: string
+          description: Bot order ID
+        userId:
+          type: string
+          description: User ID
+        keyId:
+          type: string
+          description: API Key ID
+        exchange:
+          type: string
+          description: Exchange identifier
+          example: pionex.v2
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        status:
+          type: string
+          description: Order status
+        createTime:
+          type: integer
+          format: int64
+          description: Creation timestamp in milliseconds
+        closeTime:
+          type: integer
+          format: int64
+          description: Close timestamp in milliseconds
+        copyFrom:
+          type: string
+          description: Copy source order ID
+        copyType:
+          type: string
+          description: Copy type
+        strategyId:
+          type: string
+          description: Strategy ID
+        canceling:
+          type: integer
+          format: int64
+          description: Canceling flag
+        note:
+          type: string
+          description: Order note
+        closeNote:
+          type: string
+          description: Close note
+        customizeName:
+          type: string
+          description: Custom name
+        botName:
+          type: string
+          description: Bot name
+        groupId:
+          type: string
+          description: Group ID
+        copyBotOrderId:
+          type: string
+          description: Copy bot order ID
+        buOrderData:
+          type: object
+          description: "Order detail data (dynamic structure depending on buOrderType)"
 
     FuturesGridOrder:
       type: object
