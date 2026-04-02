@@ -108,7 +108,7 @@ paths:
           description: |
             Order status filter:
             `running` - Running orders (default),
-            `canceled` - Closed/cancelled orders
+            `finished` - Closed/cancelled orders
           schema:
             type: string
             default: running
