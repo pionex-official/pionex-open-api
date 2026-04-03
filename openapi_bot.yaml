@@ -71,6 +71,8 @@ info:
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
     - `GET /api/v1/bot/orders/spotGrid/order` — Get spot grid order
     - `GET /api/v1/bot/orders/spotGrid/aiStrategy` — Get spot grid AI strategy
+    - `POST /api/v1/bot/orders/futuresGrid/check_params` — Check futures grid parameters
+    - `POST /api/v1/bot/orders/spotGrid/check_params` — Check spot grid parameters
 
     **Endpoints requiring `Bot trading` permission:**
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
@@ -232,6 +234,39 @@ paths:
                           buOrderData:
                             type: object
                             description: Bot order data
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/futuresGrid/check_params:
+    post:
+      tags: [Futures Grid]
+      summary: Check futures grid parameters
+      description: "Validate futures grid bot creation parameters without creating an order. Weight: 1."
+      operationId: checkFuturesGridParams
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFuturesGridRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CheckParamsResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -430,6 +465,39 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/SpotGridOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/check_params:
+    post:
+      tags: [Spot Grid]
+      summary: Check spot grid parameters
+      description: "Validate spot grid bot creation parameters without creating an order. Weight: 1."
+      operationId: checkSpotGridParams
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSpotGridRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CheckParamsResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1931,3 +1999,58 @@ components:
         error:
           type: string
           description: Error message (if failed)
+
+    CheckParamsResponse:
+      type: object
+      description: Result of a parameter validation check
+      properties:
+        valid:
+          type: boolean
+          description: Whether all parameters pass validation
+          example: false
+        errors:
+          type: array
+          description: List of validation errors (empty when valid is true)
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: The parameter field that failed validation
+                example: "buOrderData.top"
+              message:
+                type: string
+                description: Human-readable error description
+                example: "top price must be greater than bottom price"
+        constraints:
+          type: object
+          description: Parameter constraints for the given trading pair
+          properties:
+            minPrice:
+              type: string
+              description: Minimum allowed grid price
+              example: "0.01"
+            maxPrice:
+              type: string
+              description: Maximum allowed grid price
+              example: "1000000"
+            minRow:
+              type: integer
+              description: Minimum number of grid levels
+              example: 2
+            maxRow:
+              type: integer
+              description: Maximum number of grid levels
+              example: 200
+            minInvestment:
+              type: string
+              description: Minimum investment amount in quote currency
+              example: "10"
+            pricePrecision:
+              type: integer
+              description: Number of decimal places for price
+              example: 2
+            amountPrecision:
+              type: integer
+              description: Number of decimal places for investment amount
+              example: 4
