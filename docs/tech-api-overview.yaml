@@ -1,0 +1,235 @@
+openapi: 3.1.0
+info:
+  title: Pionex Bot Open API — Overview
+  description: |
+    API overview for Pionex Bot endpoints. This file is auto-maintained by SDD iterations.
+    Source of truth: openapi_bot.yaml
+  version: 1.0.0
+
+servers:
+  - url: https://api.pionex.com
+    description: Production
+
+security: []
+
+paths:
+  # Bot Orders
+  /api/v1/bot/orders:
+    get:
+      summary: Get bot order list
+      tags: [Bot Orders]
+      security:
+        - apiKey: []
+
+  # Futures Grid
+  /api/v1/bot/orders/futuresGrid/order:
+    get:
+      summary: Get futures grid order
+      tags: [Futures Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/futuresGrid/create:
+    post:
+      summary: Create futures grid order
+      tags: [Futures Grid]
+      security:
+        - apiKey: []
+      requestBody:
+        $ref: '#/components/requestBodies/CreateFuturesGridRequest'
+      responses:
+        '200':
+          description: Order created successfully
+
+  /api/v1/bot/orders/futuresGrid/check_params:
+    post:
+      summary: Check futures grid parameters
+      description: Validate futures grid bot creation parameters without creating an order. Requires Bot reading permission.
+      tags: [Futures Grid]
+      security:
+        - apiKey: []
+      requestBody:
+        $ref: '#/components/requestBodies/CreateFuturesGridRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CheckParamsResponse'
+
+  /api/v1/bot/orders/futuresGrid/adjustParams:
+    post:
+      summary: Adjust futures grid (add investment / modify range)
+      tags: [Futures Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/futuresGrid/reduce:
+    post:
+      summary: Reduce futures grid position
+      tags: [Futures Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/futuresGrid/cancel:
+    post:
+      summary: Cancel futures grid order
+      tags: [Futures Grid]
+      security:
+        - apiKey: []
+
+  # Spot Grid
+  /api/v1/bot/orders/spotGrid/order:
+    get:
+      summary: Get spot grid order
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/spotGrid/aiStrategy:
+    get:
+      summary: Get spot grid AI strategy
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/spotGrid/create:
+    post:
+      summary: Create spot grid order
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+      requestBody:
+        $ref: '#/components/requestBodies/CreateSpotGridRequest'
+      responses:
+        '200':
+          description: Order created successfully
+
+  /api/v1/bot/orders/spotGrid/check_params:
+    post:
+      summary: Check spot grid parameters
+      description: Validate spot grid bot creation parameters without creating an order. Requires Bot reading permission.
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+      requestBody:
+        $ref: '#/components/requestBodies/CreateSpotGridRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CheckParamsResponse'
+
+  /api/v1/bot/orders/spotGrid/adjustParams:
+    post:
+      summary: Adjust spot grid parameters
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/spotGrid/investIn:
+    post:
+      summary: Add investment to spot grid
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/spotGrid/cancel:
+    post:
+      summary: Cancel spot grid order
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+
+  /api/v1/bot/orders/spotGrid/profit:
+    post:
+      summary: Extract profit from spot grid
+      tags: [Spot Grid]
+      security:
+        - apiKey: []
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: PIONEX-KEY
+
+  requestBodies:
+    CreateFuturesGridRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: 'openapi_bot.yaml#/components/schemas/CreateFuturesGridRequest'
+    CreateSpotGridRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: 'openapi_bot.yaml#/components/schemas/CreateSpotGridRequest'
+
+  schemas:
+    BaseResponse:
+      $ref: 'openapi_bot.yaml#/components/schemas/BaseResponse'
+
+    CheckParamsResponse:
+      type: object
+      description: Result of a parameter validation check
+      properties:
+        valid:
+          type: boolean
+          description: Whether all parameters pass validation
+          example: false
+        errors:
+          type: array
+          description: List of validation errors (empty when valid is true)
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: The parameter field that failed validation
+                example: "buOrderData.top"
+              message:
+                type: string
+                description: Human-readable error description
+                example: "top price must be greater than bottom price"
+        constraints:
+          type: object
+          description: Parameter constraints for the given trading pair
+          properties:
+            minPrice:
+              type: string
+              example: "0.01"
+            maxPrice:
+              type: string
+              example: "1000000"
+            minRow:
+              type: integer
+              example: 2
+            maxRow:
+              type: integer
+              example: 200
+            minInvestment:
+              type: string
+              example: "10"
+            pricePrecision:
+              type: integer
+              example: 2
+            amountPrecision:
+              type: integer
+              example: 4

@@ -71,6 +71,8 @@ info:
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
     - `GET /api/v1/bot/orders/spotGrid/order` — Get spot grid order
     - `GET /api/v1/bot/orders/spotGrid/aiStrategy` — Get spot grid AI strategy
+    - `POST /api/v1/bot/orders/futuresGrid/checkParams` — Check futures grid parameters
+    - `POST /api/v1/bot/orders/spotGrid/checkParams` — Check spot grid parameters
 
     **Endpoints requiring `Bot trading` permission:**
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
@@ -232,6 +234,64 @@ paths:
                           buOrderData:
                             type: object
                             description: Bot order data
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/futuresGrid/checkParams:
+    post:
+      tags: [Futures Grid]
+      summary: Check futures grid parameters
+      description: |
+        Validate futures grid bot creation parameters and estimate investment values without creating an order. Weight: 1.
+
+        Pass `quoteInvestment = "0"` to retrieve only the `minInvestment` / `maxInvestment` range.
+        Pass a positive `quoteInvestment` to also receive full estimate fields (`estimatePerVolume`, `estimateInvestment`, etc.).
+
+        The current market price is fetched automatically — `openPrice` is not required.
+
+        **Validation error messages** (returned in `message` when `result` is `false`):
+
+        | Message | Cause |
+        |---|---|
+        | `base should end with .PERP` | `base` must end with `.PERP`, e.g. `BTC.PERP` |
+        | `invalid trend` | `trend` must be `long`, `short`, or `no_trend` |
+        | `invalid grid_type` | `gridType` must be `arithmetic` or `geometric` |
+        | `bottom must greater than 0` | `bottom` must be a positive number |
+        | `top must greater than bottom` | `top` must be strictly greater than `bottom` |
+        | `top must less or equal than max:{maxPrice}` | `top` exceeds the symbol's maximum allowed price |
+        | `top not match quote precision` | `top` has more decimal places than the symbol allows |
+        | `bottom not match quote precision` | `bottom` has more decimal places than the symbol allows |
+        | `row must greater than 1` | `row` must be at least 2 |
+        | `row must less than 501` | `row` must be at most 500 |
+        | `invalid leverage` | `leverage` must be between 1 and the symbol's maximum leverage |
+        | `extra_margin should greater than or equal 0` | `extraMarginAmount` must be >= 0 |
+        | `grid profit per volume less than 0` | 网格区间过小或 `row` 过多，导致单格利润 < 0 |
+        | `less than min investment` | `quoteInvestment` 小于计算得出的 `minInvestment` |
+      operationId: checkFuturesGridParams
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckFuturesGridParamsRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FuturesGridCheckParamsData'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -430,6 +490,60 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/SpotGridOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/spotGrid/checkParams:
+    post:
+      tags: [Spot Grid]
+      summary: Check spot grid parameters
+      description: |
+        Validate spot grid bot creation parameters and estimate investment values without creating an order. Weight: 1.
+
+        Pass `quoteTotalInvestment = "0"` to retrieve only the `minInvestment` / `maxInvestment` range.
+        Pass a positive `quoteTotalInvestment` to also receive full estimate fields (`estimatePerVolume`, `estimateFee`, etc.).
+
+        The current market price is fetched automatically — `open_price` is not required.
+
+        **Validation error messages** (returned in `message` when `result` is `false`):
+
+        The spot grid parameter check (`GridV5CreateCheck`) validates number format and investment amount only.
+        Business-logic rules such as `top > bottom`, `gridType` enum, and `row` range are enforced by the
+        downstream service and may also appear in `message`.
+
+        | Message | Cause |
+        |---|---|
+        | `number invalid: {value}` | `top` or `bottom` is not a valid numeric string |
+        | `number int too long: {value}` | Integer part of `top` or `bottom` exceeds 15 digits |
+        | `number decimal too long: {value}` | Decimal part of `top` or `bottom` exceeds 15 digits |
+        | `invalid quote total investment` | `quoteTotalInvestment` must be >= 0 |
+        | `grid profit per volume less than 0` | 网格区间过小或 `row` 过多，导致单格利润 < 0 |
+        | `less than min investment` | `quoteTotalInvestment` 小于计算得出的 `minInvestment` |
+      operationId: checkSpotGridParams
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckSpotGridParamsRequest'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SpotGridCheckParamsData'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1311,6 +1425,68 @@ components:
           type: boolean
           description: Whether to follow close
 
+    CheckFuturesGridParamsRequest:
+      type: object
+      required: [base, quote, buOrderData]
+      properties:
+        base:
+          type: string
+          description: "Base currency, must end with `.PERP`"
+          example: BTC.PERP
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        buOrderData:
+          $ref: '#/components/schemas/CheckFuturesGridParamsOrderData'
+
+    CheckFuturesGridParamsOrderData:
+      type: object
+      required: [top, bottom, row, gridType, trend, leverage, extraMargin, quoteInvestment]
+      properties:
+        top:
+          type: string
+          description: "Grid upper price. Must be greater than `bottom` and match the symbol's price precision."
+        bottom:
+          type: string
+          description: "Grid lower price. Must be greater than 0 and match the symbol's price precision."
+        row:
+          type: integer
+          description: Number of grid levels (2–500)
+          minimum: 2
+          maximum: 500
+        gridType:
+          type: string
+          description: "Grid spacing type: `arithmetic` (equal difference) or `geometric` (equal ratio)"
+          enum: [arithmetic, geometric]
+        trend:
+          type: string
+          description: "Grid direction: `long`, `short`, or `no_trend` (neutral)"
+          enum: [long, short, no_trend]
+        leverage:
+          type: integer
+          description: Leverage multiplier (1 to symbol's maximum leverage)
+        extraMargin:
+          type: boolean
+          description: "`true` = reserve extra margin; `false` = do not reserve"
+        quoteInvestment:
+          type: string
+          description: |
+            Investment amount in quote currency.
+            - `"0"`: returns only `minInvestment` and `maxInvestment`; other estimate fields are not meaningful.
+            - Positive value: returns full estimate results. Value must be within [`minInvestment`, `maxInvestment`] for liquidation price fields to be populated.
+          example: "0"
+        extraMarginAmount:
+          type: string
+          description: "Manual extra margin amount. Only applies when `extraMargin=false`. Must be >= 0. Omit or pass empty string to use 0."
+        condition:
+          type: string
+          description: 触发价。设置后机器人在价格达到触发价时才开始运行。
+        conditionDirection:
+          type: string
+          description: "触发方向：`\"-1\"` 价格跌至触发价，`\"1\"` 价格涨至触发价"
+          enum: ["-1", "1"]
+
     AdjustFuturesGridRequest:
       type: object
       required: [buOrderId, type, extraMargin, openPrice]
@@ -1831,6 +2007,57 @@ components:
           enum: [NOT_SELL, TO_QUOTE, TO_USDT]
           default: NOT_SELL
 
+    CheckSpotGridParamsRequest:
+      type: object
+      required: [base, quote, buOrderData]
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        buOrderData:
+          $ref: '#/components/schemas/CheckSpotGridParamsOrderData'
+
+    CheckSpotGridParamsOrderData:
+      type: object
+      required: [top, bottom, row, gridType, quoteTotalInvestment]
+      properties:
+        top:
+          type: string
+          description: "Grid upper price. Must be a valid numeric string."
+          example: "50000"
+        bottom:
+          type: string
+          description: "Grid lower price. Must be a valid numeric string."
+          example: "40000"
+        row:
+          type: integer
+          description: "Number of grid levels. Recommended range: 2–1000."
+          example: 20
+        gridType:
+          type: string
+          description: "Grid spacing type: `arithmetic` (equal difference) or `geometric` (equal ratio)"
+          enum: [arithmetic, geometric]
+          example: arithmetic
+        quoteTotalInvestment:
+          type: string
+          description: |
+            Investment amount in quote currency. Must be >= 0.
+            - `"0"`: returns only `minInvestment` and `maxInvestment`; other estimate fields are not meaningful.
+            - Positive value: returns full estimate results.
+          example: "0"
+        condition:
+          type: string
+          description: 触发价。设置后机器人在价格达到触发价时才开始运行。
+        conditionDirection:
+          type: string
+          description: "触发方向：`\"-1\"` 价格跌至触发价，`\"1\"` 价格涨至触发价"
+          enum: ["-1", "1"]
+
     AdjustSpotGridParamsRequest:
       type: object
       required: [buOrderId]
@@ -1931,3 +2158,78 @@ components:
         error:
           type: string
           description: Error message (if failed)
+
+    FuturesGridCheckParamsData:
+      type: object
+      description: |
+        Futures grid parameter check result data (returned when `result` is `true`).
+        When `quoteInvestment` is `"0"`, only `minInvestment` and `maxInvestment` are meaningful.
+        All other estimate fields require a positive `quoteInvestment`.
+        Liquidation price fields are empty when `quoteInvestment` is 0 or outside [`minInvestment`, `maxInvestment`].
+      properties:
+        minInvestment:
+          type: string
+          description: Minimum investment amount in quote currency
+          example: "10.5"
+        maxInvestment:
+          type: string
+          description: Maximum investment amount in quote currency
+          example: "50000"
+        estimatePerVolume:
+          type: string
+          description: "Estimated per-grid buy/sell quantity. Meaningful only when `quoteInvestment > 0`."
+        estimateInvestment:
+          type: string
+          description: "Estimated amount allocated to investment (position margin + order margin + fee). Meaningful only when `quoteInvestment > 0`."
+        estimateExtraMargin:
+          type: string
+          description: "Estimated extra margin reserved. Meaningful only when `quoteInvestment > 0`."
+        estimateLiquidationPriceUp:
+          type: string
+          description: "Estimated upper liquidation price. Empty when `quoteInvestment` is 0 or out of range. Returns `\"0\"` for long-only grids (no upper liquidation risk)."
+        estimateLiquidationPriceDown:
+          type: string
+          description: "Estimated lower liquidation price. Empty when `quoteInvestment` is 0 or out of range. Returns `\"0\"` for short-only grids (no lower liquidation risk)."
+        estimateFee:
+          type: string
+          description: "Estimated opening trading fee. Meaningful only when `quoteInvestment > 0`."
+        estimatePositionOccupyMargin:
+          type: string
+          description: "Estimated margin occupied by open positions. Meaningful only when `quoteInvestment > 0`."
+        estimateOrderOccupyMargin:
+          type: string
+          description: "Estimated margin occupied by pending open orders. Meaningful only when `quoteInvestment > 0`."
+        slippage:
+          type: string
+          description: "Recommended opening slippage (e.g. `\"0.01\"` = 1%)"
+        estimatePosition:
+          type: string
+          description: "Estimated position opened immediately at order creation. Positive = long, negative = short. Meaningful only when `quoteInvestment > 0`."
+
+    SpotGridCheckParamsData:
+      type: object
+      description: |
+        Spot grid parameter check result data (returned when `result` is `true`).
+        When `quoteTotalInvestment` is `"0"`, only `minInvestment` and `maxInvestment` are meaningful.
+        All other estimate fields require a positive `quoteTotalInvestment`.
+      properties:
+        minInvestment:
+          type: string
+          description: Minimum investment amount in quote currency
+          example: "10"
+        maxInvestment:
+          type: string
+          description: Maximum investment amount in quote currency
+          example: "100000"
+        estimatePerVolume:
+          type: string
+          description: "Estimated per-grid buy/sell quantity. Meaningful only when `quoteTotalInvestment > 0`."
+        estimateFee:
+          type: string
+          description: "Estimated opening trading fee. Meaningful only when `quoteTotalInvestment > 0`."
+        slippage:
+          type: string
+          description: "Recommended opening slippage (e.g. `\"0.01\"` = 1%)"
+
+    CheckParamsResponse:
+      $ref: '#/components/schemas/SpotGridCheckParamsData'
