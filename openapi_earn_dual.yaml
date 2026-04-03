@@ -1,0 +1,1355 @@
+openapi: 3.0.3
+info:
+  title: Pionex Earn Open API - Dual Investment
+  description: |
+    Pionex Dual Investment Open API.
+
+    # General Info
+
+    ## Basic Info
+
+    > **Note:** The Dual Investment API is currently in **Beta**. If you would like to use it, please contact us at [open@pionex.com](mailto:open@pionex.com).
+
+    **Base URL:** `https://api.pionex.com`
+
+    **Request Format:**
+    - For private requests, the `timestamp` parameter (in milliseconds) must be included in the query string. The timestamp is valid within a range of +/-20 seconds.
+    - Private requests require `PIONEX-KEY` (API Key) and `PIONEX-SIGNATURE` headers.
+    - GET requests: additional parameters are passed in the query string.
+    - POST/DELETE requests: parameters are passed in the request body as JSON (`application/json`).
+    - Zero-valued number parameters are disregarded.
+
+    **Signature Construction:**
+    - GET: `METHOD + PATH_URL + QUERY + TIMESTAMP`
+    - POST/DELETE: `METHOD + PATH_URL + QUERY + TIMESTAMP + body`
+
+    **Response Format:**
+
+    All responses are JSON objects containing:
+    - `result` (boolean): success indicator
+    - `timestamp` (number): response timestamp in milliseconds
+    - On success: `data` object with business information
+    - On failure: `code` (string) and `message` (string) with error details
+
+    Success example:
+    ```json
+    {"result": true, "data": {...}, "timestamp": 1566691672311}
+    ```
+
+    Failure example:
+    ```json
+    {"result": false, "code": "DUAL_PARAMETER_ERROR", "message": "invalid base quote", "timestamp": 1566691672311}
+    ```
+
+    ## Rate Limits
+
+    - Each endpoint has a weight value that determines how many requests it counts toward the limit.
+    - IP-based and account-based limits operate independently.
+    - All endpoints share the 10 per second limit based on IP.
+    - Private endpoints share the 10 per second limit based on ACCOUNT.
+    - Exceeding the weight limit results in HTTP 429 status code.
+
+    ## Authentication
+
+    [API Key Guide](https://www.pionex.com/docs/api-docs/references/api-key-guide)
+
+    Private endpoints require HMAC SHA256 signature authentication.
+
+    **Required headers:**
+    - `PIONEX-KEY`: Your API Key
+    - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+    **Required query parameter:**
+    - `timestamp`: Current time in milliseconds (valid within +/-20 seconds)
+
+    ### API Key Permissions
+
+    **Public endpoints (no authentication required):**
+    - `GET /api/v1/earn/dual/symbols` — List supported trading pairs
+    - `GET /api/v1/earn/dual/openProducts` — List open products
+    - `GET /api/v1/earn/dual/prices` — Get product prices
+    - `GET /api/v1/earn/dual/index` — Get underlying index price
+    - `GET /api/v1/earn/dual/deliveryPrices` — Get historical delivery prices
+
+    **Endpoints requiring `Enable reading` permission:**
+    - `GET /api/v1/earn/dual/balances` — Get user balances
+    - `POST /api/v1/earn/dual/invests` — Batch query investment orders
+    - `GET /api/v1/earn/dual/records` — Get investment history
+
+    **Endpoints requiring `Earn` permission:**
+    - `POST /api/v1/earn/dual/invest` — Create investment order
+    - `DELETE /api/v1/earn/dual/invest` — Revoke investment order
+    - `POST /api/v1/earn/dual/collect` — Collect settled earnings
+  version: 1.0.0
+  contact:
+    name: Pionex API Support
+    url: https://t.me/pionexapi
+
+servers:
+  - url: https://api.pionex.com
+    description: Production
+
+security: []
+
+tags:
+  - name: Dual
+    description: Dual Investment endpoints
+
+paths:
+  /api/v1/earn/dual/symbols:
+    get:
+      tags: [Dual]
+      summary: List supported trading pairs
+      description: |
+        Returns all trading pairs supported by Dual Investment, optionally filtered by base currency. Weight: 1.
+
+        Supported quote currencies include: `USDT`, `USDC`, `USD`, `USDXO`.
+
+        Example request:
+        ```
+        GET /api/v1/earn/dual/symbols?base=BTC
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "coins": [
+              {
+                "base": "BTC",
+                "quote": "USDT",
+                "currency": "USDT",
+                "basePrecision": 8,
+                "currencyPrecision": 8,
+                "baseMin": "0.00001",
+                "currencyMin": "1",
+                "baseMax": "80",
+                "currencyMax": "2000000"
+              }
+            ]
+          },
+          "timestamp": 1774959429596
+        }
+        ```
+      operationId: dualSymbols
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: false
+          description: "Base currency filter (e.g. `BTC`, `ETH`). Omit to return all supported pairs."
+          schema:
+            type: string
+            example: BTC
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualSymbolsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/openProducts:
+    get:
+      tags: [Dual]
+      summary: List open products
+      description: |
+        Returns currently open Dual Investment products for a specific trading pair and type. Weight: 1.
+
+        **Type semantics:**
+        - `DUAL_BASE`: invest in base currency (e.g. BTC); if price rises above strike at expiry, principal + yield are returned in base currency, otherwise converted to quote currency
+        - `DUAL_CURRENCY`: invest in quote/investment currency (e.g. USDT); if price falls below strike at expiry, principal + yield are returned in quote currency, otherwise converted to base currency
+
+        **Quote currency rules:**
+        - `base=BTC` or `base=ETH`: use `quote=USDXO`, `currency=USDT` or `USDC`
+        - All other base currencies: use `quote=USDT`, `currency=USDT`
+
+        Example request (BTC, DUAL_BASE):
+        ```
+        GET /api/v1/earn/dual/openProducts?base=BTC&quote=USDXO&currency=USDT&type=DUAL_BASE
+        ```
+
+        Example request (XRP, DUAL_BASE):
+        ```
+        GET /api/v1/earn/dual/openProducts?base=XRP&quote=USDT&currency=USDT&type=DUAL_BASE
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "products": [
+              {
+                "productId": "BTC-USDXO-260401-69000-C-USDT",
+                "base": "BTC",
+                "quote": "USDXO",
+                "currency": "USDT",
+                "type": "DUAL_BASE",
+                "createTime": 1774686600000,
+                "expireTime": 1775030400000,
+                "strike": "69000",
+                "expired": false
+              }
+            ]
+          },
+          "timestamp": 1775025855477
+        }
+        ```
+      operationId: dualProducts
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: true
+          description: "Base currency (e.g. `BTC`, `ETH`, `XRP`)"
+          schema:
+            type: string
+            example: BTC
+        - name: quote
+          in: query
+          required: true
+          description: "Quote currency. Use `USDXO` for BTC/ETH; use `USDT` for all other base currencies."
+          schema:
+            type: string
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
+        - name: type
+          in: query
+          required: true
+          description: "`DUAL_BASE` — invest in base currency; `DUAL_CURRENCY` — invest in quote/investment currency"
+          schema:
+            type: string
+            enum: [DUAL_BASE, DUAL_CURRENCY]
+            example: DUAL_BASE
+        - name: currency
+          in: query
+          required: false
+          description: "Investment currency filter. For BTC/ETH pairs: `USDT` or `USDC`. For other pairs: `USDT`."
+          schema:
+            type: string
+            example: USDT
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualProductsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/prices:
+    get:
+      tags: [Dual]
+      summary: Get product prices
+      description: |
+        Returns the latest yield rate and investability status for Dual Investment products. Weight: 1.
+
+        **All three parameters are required:** `base`, `quote`, and `productIds`.
+        Omitting any one of them will return a `DUAL_PARAMETER_ERROR`.
+
+        `productIds` is a comma-separated list of product IDs. Works for both `USDT` and `USDXO` quoted pairs.
+
+        When `canInvest` is `false`, `profit` and `baseSize` will be empty strings.
+
+        > **Workflow note:** Always call this endpoint before placing an order. The `profit` value returned here must be passed as-is to `POST /api/v1/earn/dual/invest`. Submitting a stale or mismatched `profit` will be rejected.
+
+        Example request (USDT pair):
+        ```
+        GET /api/v1/earn/dual/prices?base=LRC&quote=USDT&productIds=LRC-USDT-260410-0.03-C-USDT,LRC-USDT-260410-0.02-C-USDT
+        ```
+
+        Example request (USDXO pair):
+        ```
+        GET /api/v1/earn/dual/prices?base=ETH&quote=USDXO&productIds=ETH-USDXO-260410-3000-C-USDT,ETH-USDXO-260410-2900-C-USDT
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "products": [
+              {
+                "productId": "LRC-USDT-260410-0.02-C-USDT",
+                "canInvest": true,
+                "profit": "0.01242",
+                "baseSize": "8000000",
+                "updateTime": 1775026225630
+              },
+              {
+                "productId": "LRC-USDT-260410-0.03-C-USDT",
+                "canInvest": false,
+                "profit": "0",
+                "baseSize": "",
+                "updateTime": 0
+              }
+            ]
+          },
+          "timestamp": 1775026244892
+        }
+        ```
+      operationId: dualPrices
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: true
+          description: "Base currency (e.g. `BTC`, `ETH`, `LRC`)"
+          schema:
+            type: string
+            example: ETH
+        - name: quote
+          in: query
+          required: true
+          description: "Quote currency. Use `USDXO` for BTC/ETH pairs; use `USDT` for all other base currencies."
+          schema:
+            type: string
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
+        - name: productIds
+          in: query
+          required: true
+          description: "Comma-separated product ID list. Multiple IDs are supported (e.g. `ETH-USDXO-260410-3000-C-USDT,ETH-USDXO-260410-2900-C-USDT`). Obtain IDs from `/openProducts`."
+          schema:
+            type: string
+            example: ETH-USDXO-260410-3000-C-USDT,ETH-USDXO-260410-2900-C-USDT
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualPricesData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/index:
+    get:
+      tags: [Dual]
+      summary: Get underlying index price
+      description: |
+        Returns the real-time index price for a Dual Investment underlying asset. Weight: 1.
+
+        Both `base` and `quote` are required. Works for both `USDT` and `USDXO` quoted pairs.
+
+        The index price is the reference price used at settlement to determine whether the strike price was hit.
+
+        Example request (USDXO pair):
+        ```
+        GET /api/v1/earn/dual/index?base=BTC&quote=USDXO
+        ```
+
+        Example request (USDT pair):
+        ```
+        GET /api/v1/earn/dual/index?base=LRC&quote=USDT
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "index": "69142.6",
+            "base": "BTC",
+            "quote": "USDXO",
+            "updateTime": 1775025942486
+          },
+          "timestamp": 1775025942754
+        }
+        ```
+      operationId: dualIndex
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: true
+          description: "Base currency (e.g. `BTC`, `ETH`, `LRC`)"
+          schema:
+            type: string
+            example: BTC
+        - name: quote
+          in: query
+          required: true
+          description: "Quote currency. Use `USDXO` for BTC/ETH pairs; use `USDT` for all other base currencies."
+          schema:
+            type: string
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualIndexData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/deliveryPrices:
+    get:
+      tags: [Dual]
+      summary: Get historical delivery prices
+      description: |
+        Returns historical settlement delivery prices for a Dual Investment pair. Weight: 1.
+
+        The delivery price is the index price recorded at the exact moment of each product's expiry,
+        used to determine the settlement direction (base or quote currency payout).
+
+        `base` is required. `quote` is optional but recommended to narrow results — use `USDXO` for BTC/ETH pairs and `USDT` for all other base currencies.
+
+        Example request (BTC/USDXO):
+        ```
+        GET /api/v1/earn/dual/deliveryPrices?base=BTC&quote=USDXO
+        ```
+
+        Example request (XRP/USDT):
+        ```
+        GET /api/v1/earn/dual/deliveryPrices?base=XRP&quote=USDT
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "prices": [
+              {
+                "delivery": "69142.6",
+                "date": "2026-04-01",
+                "deliveryTime": 1775030400000
+              }
+            ]
+          },
+          "timestamp": 1775026529937
+        }
+        ```
+      operationId: deliveryPrices
+      security: []
+      parameters:
+        - name: base
+          in: query
+          required: true
+          description: "Base currency (e.g. `BTC`, `XRP`)"
+          schema:
+            type: string
+            example: BTC
+        - name: quote
+          in: query
+          required: false
+          description: "Quote currency filter. Use `USDXO` for BTC/ETH pairs; use `USDT` for all other base currencies."
+          schema:
+            type: string
+            enum: [USDT, USDC, USDXO]
+            example: USDXO
+        - name: startTime
+          in: query
+          required: false
+          description: Start timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+            example: 1774944000000
+        - name: endTime
+          in: query
+          required: false
+          description: End timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+            example: 1775030400000
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeliveryPricesData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/earn/dual/balances:
+    get:
+      tags: [Dual]
+      summary: Get user balances
+      description: |
+        Returns the authenticated user's Dual Investment account balances. Requires `View` permission. Weight: 1.
+
+        Example request:
+        ```
+        GET /api/v1/earn/dual/balances?timestamp=1774959429596
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "balances": [
+              {
+                "base": "BTC",
+                "coin": "USDT",
+                "free": "100.00",
+                "frozen": "50.00",
+                "updateTime": 1774959429596
+              }
+            ]
+          },
+          "timestamp": 1774959429596
+        }
+        ```
+      operationId: dualBalances
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: merge
+          in: query
+          required: false
+          description: "When `true`, merges balances with the same coin across different base currencies"
+          schema:
+            type: boolean
+            example: false
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualBalancesData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/invest:
+    post:
+      tags: [Dual]
+      summary: Create investment order
+      description: |
+        Creates a new Dual Investment order. Requires `Earn` permission. Weight: 1.
+
+        Provide either `baseAmount` (invest in base currency) or `currencyAmount` (invest in investment currency), not both.
+
+        > **Workflow:** Call `GET /api/v1/earn/dual/prices` first to obtain the current `profit` value, then pass it unchanged to this endpoint. The `profit` field must match the live price — a stale or mismatched value will be rejected.
+
+        Example request body:
+        ```json
+        {
+          "base": "BTC",
+          "productId": "BTC-USDXO-260402-68000-P-USDT",
+          "clientDualId": "my-order-001",
+          "currencyAmount": "100",
+          "profit": "0.0039"
+        }
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "clientDualId": "my-order-001",
+            "state": "CONFIRMED"
+          },
+          "timestamp": 1775027817297
+        }
+        ```
+      operationId: dualInvest
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualInvestRequest'
+      responses:
+        '200':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualInvestData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Dual]
+      summary: Revoke investment order
+      description: |
+        Revokes a pending Dual Investment order before it is matched. Requires `Earn` permission. Weight: 1.
+
+        Parameters are passed as a JSON request body, not query string.
+        Only orders in a pending/unmatched state can be revoked.
+
+        Example request body:
+        ```json
+        {
+          "base": "BTC",
+          "productId": "BTC-USDXO-260402-68000-P-USDT",
+          "clientDualId": "my-order-001"
+        }
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "clientDualId": "my-order-001"
+          },
+          "timestamp": 1775027817297
+        }
+        ```
+      operationId: dualRevokeInvest
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualRevokeInvestRequest'
+      responses:
+        '200':
+          description: Order revoked successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualRevokeInvestData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/invests:
+    post:
+      tags: [Dual]
+      summary: Batch query investment orders
+      description: |
+        Returns details for a batch of Dual Investment orders by client order ID list. Requires `View` permission. Weight: 1.
+
+        Example request body:
+        ```json
+        {
+          "base": "BTC",
+          "clientDualIds": ["my-order-001", "my-order-002"]
+        }
+        ```
+      operationId: dualGetInvests
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualGetInvestsRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualInvestRecordsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/records:
+    get:
+      tags: [Dual]
+      summary: Get investment history
+      description: |
+        Returns paginated Dual Investment history for the authenticated user. Requires `View` permission. Weight: 1.
+
+        Example request:
+        ```
+        GET /api/v1/earn/dual/records?base=BTC&quote=USDXO&limit=10&endTime=1775027817297&timestamp=1775027817297
+        ```
+      operationId: dualInvestRecords
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: base
+          in: query
+          required: true
+          description: "Base currency (e.g. `BTC`)"
+          schema:
+            type: string
+            example: BTC
+        - name: quote
+          in: query
+          required: false
+          description: "Quote currency filter (e.g. `USDT`)"
+          schema:
+            type: string
+            example: USDT
+        - name: currency
+          in: query
+          required: false
+          description: "Investment currency filter (e.g. `USDT`, `BTC`)"
+          schema:
+            type: string
+            example: USDT
+        - name: filter
+          in: query
+          required: false
+          description: "Status filter"
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          required: false
+          description: Start timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+            example: 1743494400000
+        - name: endTime
+          in: query
+          required: true
+          description: End timestamp in milliseconds
+          schema:
+            type: integer
+            format: int64
+            example: 1775027817297
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of records to return per page
+          schema:
+            type: integer
+            format: int64
+            example: 20
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualInvestRecordsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/dual/collect:
+    post:
+      tags: [Dual]
+      summary: Collect settled earnings
+      description: |
+        Collects settled Dual Investment earnings into the user's spot account. Requires `Earn` permission. Weight: 1.
+
+        Only orders in a settled state can be collected.
+
+        Example request body:
+        ```json
+        {
+          "base": "BTC",
+          "clientDualId": "my-order-001"
+        }
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "clientDualId": "my-order-001"
+          },
+          "timestamp": 1774959429596
+        }
+        ```
+      operationId: dualCollect
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DualCollectRequest'
+      responses:
+        '200':
+          description: Collect succeeded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DualCollectData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: PIONEX-KEY
+      description: |
+        API Key authentication. Requires two headers:
+        - `PIONEX-KEY`: Your API Key
+        - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+        And a `timestamp` query parameter (milliseconds).
+
+  parameters:
+    Timestamp:
+      name: timestamp
+      in: query
+      required: true
+      description: Current timestamp in milliseconds (valid range +/- 20 seconds)
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: "Bad request — invalid parameters. Common error code: `DUAL_PARAMETER_ERROR`"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication failed — missing or invalid API Key / signature
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ─── Base ───────────────────────────────────────────────
+    BaseResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Whether the request succeeded
+          example: true
+        timestamp:
+          type: integer
+          format: int64
+          description: Response timestamp in milliseconds
+          example: 1774959429596
+
+    ErrorResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          example: false
+        code:
+          type: string
+          description: "Error code (e.g. `DUAL_PARAMETER_ERROR`)"
+          example: DUAL_PARAMETER_ERROR
+        message:
+          type: string
+          description: Human-readable error message
+          example: invalid base quote
+        timestamp:
+          type: integer
+          format: int64
+          example: 1774959429596
+
+    # ─── Dual Symbols ────────────────────────────────────────
+    DualSymbolsData:
+      type: object
+      properties:
+        coins:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualCoinSymbol'
+
+    DualCoinSymbol:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: "Quote currency. Supported values: `USDT`, `USDC`, `USD`, `USDXO`"
+          example: USDT
+        currency:
+          type: string
+          description: Investment currency (the currency used to place the order)
+          example: USDT
+        basePrecision:
+          type: integer
+          format: int64
+          description: Decimal precision for base currency amounts
+          example: 8
+        currencyPrecision:
+          type: integer
+          format: int64
+          description: Decimal precision for investment currency amounts
+          example: 8
+        baseMin:
+          type: string
+          description: Minimum investment amount in base currency
+          example: "0.00001"
+        currencyMin:
+          type: string
+          description: Minimum investment amount in investment currency
+          example: "1"
+        baseMax:
+          type: string
+          description: Maximum investment amount in base currency
+          example: "80"
+        currencyMax:
+          type: string
+          description: Maximum investment amount in investment currency
+          example: "2000000"
+
+    # ─── Dual Products ───────────────────────────────────────
+    DualProductsData:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualProduct'
+
+    DualProduct:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: "Unique product ID. Format: `{BASE}-{QUOTE}-{YYMMDD}-{STRIKE}-{C|P}-{CURRENCY}`. `C` = DUAL_BASE, `P` = DUAL_CURRENCY."
+          example: BTC-USDXO-260401-69000-C-USDT
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        currency:
+          type: string
+          description: Investment currency
+          example: USDT
+        type:
+          type: string
+          description: "`DUAL_BASE` — invest in base currency; `DUAL_CURRENCY` — invest in quote/investment currency"
+          enum: [DUAL_BASE, DUAL_CURRENCY]
+          example: DUAL_BASE
+        createTime:
+          type: integer
+          format: int64
+          description: Product creation timestamp in milliseconds
+          example: 1774900000000
+        expireTime:
+          type: integer
+          format: int64
+          description: Product expiry timestamp in milliseconds
+          example: 1775160000000
+        strike:
+          type: string
+          description: Strike price — the threshold price at settlement
+          example: "70000"
+        expired:
+          type: boolean
+          description: Whether the product has already expired
+          example: false
+
+    # ─── Dual Prices ─────────────────────────────────────────
+    DualPricesData:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualPrice'
+
+    DualPrice:
+      type: object
+      properties:
+        productId:
+          type: string
+          description: Product ID
+          example: BTC-USDT-260402-70000-C-USDT
+        canInvest:
+          type: boolean
+          description: Whether the product is currently open for new investment
+          example: true
+        profit:
+          type: string
+          description: "Annualized yield rate (e.g. `0.0215` = 2.15%)"
+          example: "0.0215"
+        baseSize:
+          type: string
+          description: Base currency amount per unit
+          example: "0.001"
+        updateTime:
+          type: integer
+          format: int64
+          description: Last price update timestamp in milliseconds
+          example: 1774959429596
+
+    # ─── Dual Index ──────────────────────────────────────────
+    DualIndexData:
+      type: object
+      properties:
+        index:
+          type: string
+          description: Current real-time index price
+          example: "66717.41"
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+          example: 1774960122854
+
+    # ─── Delivery Prices ─────────────────────────────────────
+    DeliveryPricesData:
+      type: object
+      properties:
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryPrice'
+
+    DeliveryPrice:
+      type: object
+      properties:
+        delivery:
+          type: string
+          description: Settlement delivery price (index price at expiry)
+          example: "67500.00"
+        date:
+          type: string
+          description: "Delivery date in `YYYY-MM-DD` format"
+          example: "2026-04-02"
+        deliveryTime:
+          type: integer
+          format: int64
+          description: Delivery timestamp in milliseconds
+          example: 1743580800000
+
+    # ─── Dual Balances ───────────────────────────────────────
+    DualBalancesData:
+      type: object
+      properties:
+        balances:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualBalance'
+
+    DualBalance:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency this balance is associated with
+          example: BTC
+        coin:
+          type: string
+          description: The actual currency of the balance
+          example: USDT
+        free:
+          type: string
+          description: Available (unlocked) balance
+          example: "100.00"
+        frozen:
+          type: string
+          description: Frozen balance currently locked in active orders
+          example: "50.00"
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+          example: 1774959429596
+
+    # ─── Dual Invest ─────────────────────────────────────────
+    DualInvestRequest:
+      type: object
+      required: [base]
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        clientDualId:
+          type: string
+          description: "Client-assigned order ID used as an idempotency key. Recommended to avoid duplicate orders."
+          example: my-order-001
+        productId:
+          type: string
+          description: Product ID to invest in
+          example: BTC-USDT-260402-70000-C-USDT
+        baseAmount:
+          type: string
+          description: "Investment amount in base currency (e.g. BTC). Mutually exclusive with `currencyAmount`."
+          example: "0.01"
+        currencyAmount:
+          type: string
+          description: "Investment amount in investment currency (e.g. USDT). Mutually exclusive with `baseAmount`."
+          example: "100"
+        profit:
+          type: string
+          description: "Expected yield rate. Must match the current price from `/prices`."
+          example: "0.0215"
+
+    DualInvestData:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+          example: my-order-001
+        state:
+          type: string
+          description: Investment state after creation (e.g. `CONFIRMED`)
+          example: CONFIRMED
+
+    # ─── Dual Revoke Invest ──────────────────────────────────
+    DualRevokeInvestRequest:
+      type: object
+      required: [base, productId, clientDualId]
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        productId:
+          type: string
+          description: Product ID of the order to revoke
+          example: BTC-USDXO-260402-68000-P-USDT
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+          example: my-order-001
+
+    DualRevokeInvestData:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+          example: my-order-001
+
+    # ─── Dual Get Invests ────────────────────────────────────
+    DualGetInvestsRequest:
+      type: object
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        clientDualIds:
+          type: array
+          items:
+            type: string
+          description: List of client-assigned dual investment order IDs to query
+          example: ["my-order-001", "my-order-002"]
+
+    # ─── Dual Invest Records (shared by /invests and /records) ─
+    DualInvestRecordsData:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/DualRecord'
+
+    DualRecord:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+          example: my-order-001
+        state:
+          type: string
+          description: Investment state
+          example: SETTLED
+        productId:
+          type: string
+          description: Product ID
+          example: BTC-USDT-260402-70000-C-USDT
+        type:
+          type: string
+          description: "`DUAL_BASE` — invest in base currency; `DUAL_CURRENCY` — invest in quote/investment currency"
+          enum: [DUAL_BASE, DUAL_CURRENCY]
+          example: DUAL_BASE
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        currency:
+          type: string
+          description: Investment currency
+          example: USDT
+        strike:
+          type: string
+          description: Strike price
+          example: "70000"
+        expireTime:
+          type: integer
+          format: int64
+          description: Product expiry timestamp in milliseconds
+          example: 1775160000000
+        baseAmount:
+          type: string
+          description: Investment amount in base currency
+          example: "0.01"
+        currencyAmount:
+          type: string
+          description: Investment amount in investment currency
+          example: "100"
+        profit:
+          type: string
+          description: "Yield rate at time of investment (e.g. `0.0215` = 2.15%)"
+          example: "0.0215"
+        baseFilled:
+          type: string
+          description: Matched/filled amount in base currency
+          example: "0.01"
+        currencyFilled:
+          type: string
+          description: Matched/filled amount in investment currency
+          example: "100"
+        settlementState:
+          type: string
+          description: Settlement state
+          example: SETTLED
+        settlementTime:
+          type: integer
+          format: int64
+          description: Settlement timestamp in milliseconds
+          example: 1775160000000
+        settlementBase:
+          type: string
+          description: Currency received as principal at settlement
+          example: USDT
+        settlementCurrency:
+          type: string
+          description: Currency received as earnings at settlement
+          example: USDT
+        deliveryPrice:
+          type: string
+          description: Index price recorded at settlement
+          example: "71200.00"
+        createTime:
+          type: integer
+          format: int64
+          description: Order creation timestamp in milliseconds
+          example: 1774959429596
+        updateTime:
+          type: integer
+          format: int64
+          description: Last update timestamp in milliseconds
+          example: 1775160000000
+
+    # ─── Dual Collect ────────────────────────────────────────
+    DualCollectRequest:
+      type: object
+      required: [base, clientDualId, productId]
+      properties:
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID to collect
+          example: my-order-001
+        productId:
+          type: string
+          description: Product ID
+          example: BTC-USDXO-260402-68000-P-USDT
+
+    DualCollectData:
+      type: object
+      properties:
+        clientDualId:
+          type: string
+          description: Client-assigned dual investment order ID
+          example: my-order-001

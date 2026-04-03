@@ -12,6 +12,9 @@ info:
     - **Private stream**: `wss://ws.pionex.com/ws` (requires authentication)
 
     ## Authentication (Private Stream)
+
+    [API Key Guide](https://www.pionex.com/docs/api-docs/references/api-key-guide)
+
     Private streams require authentication via query parameters:
     - `key`: Your API Key
     - `timestamp`: Current time in milliseconds
