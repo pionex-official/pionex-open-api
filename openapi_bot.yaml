@@ -71,8 +71,8 @@ info:
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
     - `GET /api/v1/bot/orders/spotGrid/order` — Get spot grid order
     - `GET /api/v1/bot/orders/spotGrid/aiStrategy` — Get spot grid AI strategy
-    - `POST /api/v1/bot/orders/futuresGrid/check_params` — Check futures grid parameters
-    - `POST /api/v1/bot/orders/spotGrid/check_params` — Check spot grid parameters
+    - `POST /api/v1/bot/orders/futuresGrid/checkParams` — Check futures grid parameters
+    - `POST /api/v1/bot/orders/spotGrid/checkParams` — Check spot grid parameters
 
     **Endpoints requiring `Bot trading` permission:**
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
@@ -239,17 +239,17 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/bot/orders/futuresGrid/check_params:
+  /api/v1/bot/orders/futuresGrid/checkParams:
     post:
       tags: [Futures Grid]
       summary: Check futures grid parameters
       description: |
         Validate futures grid bot creation parameters and estimate investment values without creating an order. Weight: 1.
 
-        Pass `quote_investment = "0"` to retrieve only the `min_investment` / `max_investment` range.
-        Pass a positive `quote_investment` to also receive full estimate fields (`estimate_per_volume`, `estimate_investment`, etc.).
+        Pass `quoteInvestment = "0"` to retrieve only the `minInvestment` / `maxInvestment` range.
+        Pass a positive `quoteInvestment` to also receive full estimate fields (`estimatePerVolume`, `estimateInvestment`, etc.).
 
-        The current market price is fetched automatically — `open_price` is not required.
+        The current market price is fetched automatically — `openPrice` is not required.
 
         **Validation error messages** (returned in `message` when `result` is `false`):
 
@@ -257,7 +257,7 @@ paths:
         |---|---|
         | `base should end with .PERP` | `base` must end with `.PERP`, e.g. `BTC.PERP` |
         | `invalid trend` | `trend` must be `long`, `short`, or `no_trend` |
-        | `invalid grid_type` | `grid_type` must be `arithmetic` or `geometric` |
+        | `invalid grid_type` | `gridType` must be `arithmetic` or `geometric` |
         | `bottom must greater than 0` | `bottom` must be a positive number |
         | `top must greater than bottom` | `top` must be strictly greater than `bottom` |
         | `top must less or equal than max:{maxPrice}` | `top` exceeds the symbol's maximum allowed price |
@@ -266,7 +266,9 @@ paths:
         | `row must greater than 1` | `row` must be at least 2 |
         | `row must less than 501` | `row` must be at most 500 |
         | `invalid leverage` | `leverage` must be between 1 and the symbol's maximum leverage |
-        | `extra_margin should greater than or equal 0` | `extra_margin_amount` must be >= 0 |
+        | `extra_margin should greater than or equal 0` | `extraMarginAmount` must be >= 0 |
+        | `grid profit per volume less than 0` | 网格区间过小或 `row` 过多，导致单格利润 < 0 |
+        | `less than min investment` | `quoteInvestment` 小于计算得出的 `minInvestment` |
       operationId: checkFuturesGridParams
       security:
         - apiKey: []
@@ -493,15 +495,15 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/bot/orders/spotGrid/check_params:
+  /api/v1/bot/orders/spotGrid/checkParams:
     post:
       tags: [Spot Grid]
       summary: Check spot grid parameters
       description: |
         Validate spot grid bot creation parameters and estimate investment values without creating an order. Weight: 1.
 
-        Pass `quoteTotalInvestment = "0"` to retrieve only the `min_investment` / `max_investment` range.
-        Pass a positive `quoteTotalInvestment` to also receive full estimate fields (`estimate_per_volume`, `estimate_fee`, etc.).
+        Pass `quoteTotalInvestment = "0"` to retrieve only the `minInvestment` / `maxInvestment` range.
+        Pass a positive `quoteTotalInvestment` to also receive full estimate fields (`estimatePerVolume`, `estimateFee`, etc.).
 
         The current market price is fetched automatically — `open_price` is not required.
 
@@ -517,6 +519,8 @@ paths:
         | `number int too long: {value}` | Integer part of `top` or `bottom` exceeds 15 digits |
         | `number decimal too long: {value}` | Decimal part of `top` or `bottom` exceeds 15 digits |
         | `invalid quote total investment` | `quoteTotalInvestment` must be >= 0 |
+        | `grid profit per volume less than 0` | 网格区间过小或 `row` 过多，导致单格利润 < 0 |
+        | `less than min investment` | `quoteTotalInvestment` 小于计算得出的 `minInvestment` |
       operationId: checkSpotGridParams
       security:
         - apiKey: []
@@ -1438,7 +1442,7 @@ components:
 
     CheckFuturesGridParamsOrderData:
       type: object
-      required: [top, bottom, row, grid_type, trend, leverage, extra_margin, quote_investment]
+      required: [top, bottom, row, gridType, trend, leverage, extraMargin, quoteInvestment]
       properties:
         top:
           type: string
@@ -1451,7 +1455,7 @@ components:
           description: Number of grid levels (2–500)
           minimum: 2
           maximum: 500
-        grid_type:
+        gridType:
           type: string
           description: "Grid spacing type: `arithmetic` (equal difference) or `geometric` (equal ratio)"
           enum: [arithmetic, geometric]
@@ -1462,19 +1466,26 @@ components:
         leverage:
           type: integer
           description: Leverage multiplier (1 to symbol's maximum leverage)
-        extra_margin:
+        extraMargin:
           type: boolean
           description: "`true` = reserve extra margin; `false` = do not reserve"
-        quote_investment:
+        quoteInvestment:
           type: string
           description: |
             Investment amount in quote currency.
-            - `"0"`: returns only `min_investment` and `max_investment`; other estimate fields are not meaningful.
-            - Positive value: returns full estimate results. Value must be within [`min_investment`, `max_investment`] for liquidation price fields to be populated.
+            - `"0"`: returns only `minInvestment` and `maxInvestment`; other estimate fields are not meaningful.
+            - Positive value: returns full estimate results. Value must be within [`minInvestment`, `maxInvestment`] for liquidation price fields to be populated.
           example: "0"
-        extra_margin_amount:
+        extraMarginAmount:
           type: string
-          description: "Manual extra margin amount. Only applies when `extra_margin=false`. Must be >= 0. Omit or pass empty string to use 0."
+          description: "Manual extra margin amount. Only applies when `extraMargin=false`. Must be >= 0. Omit or pass empty string to use 0."
+        condition:
+          type: string
+          description: 触发价。设置后机器人在价格达到触发价时才开始运行。
+        conditionDirection:
+          type: string
+          description: "触发方向：`\"-1\"` 价格跌至触发价，`\"1\"` 价格涨至触发价"
+          enum: ["-1", "1"]
 
     AdjustFuturesGridRequest:
       type: object
@@ -2036,9 +2047,16 @@ components:
           type: string
           description: |
             Investment amount in quote currency. Must be >= 0.
-            - `"0"`: returns only `min_investment` and `max_investment`; other estimate fields are not meaningful.
+            - `"0"`: returns only `minInvestment` and `maxInvestment`; other estimate fields are not meaningful.
             - Positive value: returns full estimate results.
           example: "0"
+        condition:
+          type: string
+          description: 触发价。设置后机器人在价格达到触发价时才开始运行。
+        conditionDirection:
+          type: string
+          description: "触发方向：`\"-1\"` 价格跌至触发价，`\"1\"` 价格涨至触发价"
+          enum: ["-1", "1"]
 
     AdjustSpotGridParamsRequest:
       type: object
@@ -2145,68 +2163,68 @@ components:
       type: object
       description: |
         Futures grid parameter check result data (returned when `result` is `true`).
-        When `quote_investment` is `"0"`, only `min_investment` and `max_investment` are meaningful.
-        All other estimate fields require a positive `quote_investment`.
-        Liquidation price fields are empty when `quote_investment` is 0 or outside [`min_investment`, `max_investment`].
+        When `quoteInvestment` is `"0"`, only `minInvestment` and `maxInvestment` are meaningful.
+        All other estimate fields require a positive `quoteInvestment`.
+        Liquidation price fields are empty when `quoteInvestment` is 0 or outside [`minInvestment`, `maxInvestment`].
       properties:
-        min_investment:
+        minInvestment:
           type: string
           description: Minimum investment amount in quote currency
           example: "10.5"
-        max_investment:
+        maxInvestment:
           type: string
           description: Maximum investment amount in quote currency
           example: "50000"
-        estimate_per_volume:
+        estimatePerVolume:
           type: string
-          description: "Estimated per-grid buy/sell quantity. Meaningful only when `quote_investment > 0`."
-        estimate_investment:
+          description: "Estimated per-grid buy/sell quantity. Meaningful only when `quoteInvestment > 0`."
+        estimateInvestment:
           type: string
-          description: "Estimated amount allocated to investment (position margin + order margin + fee). Meaningful only when `quote_investment > 0`."
-        estimate_extra_margin:
+          description: "Estimated amount allocated to investment (position margin + order margin + fee). Meaningful only when `quoteInvestment > 0`."
+        estimateExtraMargin:
           type: string
-          description: "Estimated extra margin reserved. Meaningful only when `quote_investment > 0`."
-        estimate_liquidation_price_up:
+          description: "Estimated extra margin reserved. Meaningful only when `quoteInvestment > 0`."
+        estimateLiquidationPriceUp:
           type: string
-          description: "Estimated upper liquidation price. Empty when `quote_investment` is 0 or out of range. Returns `\"0\"` for long-only grids (no upper liquidation risk)."
-        estimate_liquidation_price_down:
+          description: "Estimated upper liquidation price. Empty when `quoteInvestment` is 0 or out of range. Returns `\"0\"` for long-only grids (no upper liquidation risk)."
+        estimateLiquidationPriceDown:
           type: string
-          description: "Estimated lower liquidation price. Empty when `quote_investment` is 0 or out of range. Returns `\"0\"` for short-only grids (no lower liquidation risk)."
-        estimate_fee:
+          description: "Estimated lower liquidation price. Empty when `quoteInvestment` is 0 or out of range. Returns `\"0\"` for short-only grids (no lower liquidation risk)."
+        estimateFee:
           type: string
-          description: "Estimated opening trading fee. Meaningful only when `quote_investment > 0`."
-        estimate_position_occupy_margin:
+          description: "Estimated opening trading fee. Meaningful only when `quoteInvestment > 0`."
+        estimatePositionOccupyMargin:
           type: string
-          description: "Estimated margin occupied by open positions. Meaningful only when `quote_investment > 0`."
-        estimate_order_occupy_margin:
+          description: "Estimated margin occupied by open positions. Meaningful only when `quoteInvestment > 0`."
+        estimateOrderOccupyMargin:
           type: string
-          description: "Estimated margin occupied by pending open orders. Meaningful only when `quote_investment > 0`."
+          description: "Estimated margin occupied by pending open orders. Meaningful only when `quoteInvestment > 0`."
         slippage:
           type: string
           description: "Recommended opening slippage (e.g. `\"0.01\"` = 1%)"
-        estimate_position:
+        estimatePosition:
           type: string
-          description: "Estimated position opened immediately at order creation. Positive = long, negative = short. Meaningful only when `quote_investment > 0`."
+          description: "Estimated position opened immediately at order creation. Positive = long, negative = short. Meaningful only when `quoteInvestment > 0`."
 
     SpotGridCheckParamsData:
       type: object
       description: |
         Spot grid parameter check result data (returned when `result` is `true`).
-        When `quoteTotalInvestment` is `"0"`, only `min_investment` and `max_investment` are meaningful.
+        When `quoteTotalInvestment` is `"0"`, only `minInvestment` and `maxInvestment` are meaningful.
         All other estimate fields require a positive `quoteTotalInvestment`.
       properties:
-        min_investment:
+        minInvestment:
           type: string
           description: Minimum investment amount in quote currency
           example: "10"
-        max_investment:
+        maxInvestment:
           type: string
           description: Maximum investment amount in quote currency
           example: "100000"
-        estimate_per_volume:
+        estimatePerVolume:
           type: string
           description: "Estimated per-grid buy/sell quantity. Meaningful only when `quoteTotalInvestment > 0`."
-        estimate_fee:
+        estimateFee:
           type: string
           description: "Estimated opening trading fee. Meaningful only when `quoteTotalInvestment > 0`."
         slippage:
