@@ -249,30 +249,31 @@ paths:
         Pass a positive `quote_investment` to receive full estimate fields.
         The current market price is fetched automatically — `open_price` is not required.
 
-        **FailedWithData 响应**：下表中标注"是"的错误，虽然 `result=false`，但响应体仍包含 `data` 字段，
-        内含 `min_investment`、`max_investment`、`slippage`，供前端展示投资范围参考。
+        **FailedWithData**: For errors marked "Yes" below, the response includes a `data` field
+        even when `result=false`, containing `min_investment`, `max_investment`, and `slippage`
+        so the client can display the valid investment range.
 
         **Validation error messages** (returned in `message` when `result` is `false`):
 
-        | Message | Cause | 含 data |
+        | Message | Cause | Includes data |
         |---|---|---|
-        | `base should end with .PERP` | `base` 必须以 `.PERP` 结尾，如 `BTC.PERP` | 否 |
-        | `invalid trend` | `trend` 必须为 `long`、`short` 或 `no_trend` | 否 |
-        | `invalid grid_type` | `grid_type` 必须为 `arithmetic` 或 `geometric` | 否 |
-        | `bottom must greater than 0` | `bottom` 必须为正数 | 否 |
-        | `top must greater than bottom` | `top` 必须严格大于 `bottom` | 否 |
-        | `top must less or equal than max:{maxPrice}` | `top` 超过交易对允许的最大价格 | 否 |
-        | `top not match quote precision` | `top` 小数位数超过交易对精度限制 | 否 |
-        | `bottom not match quote precision` | `bottom` 小数位数超过交易对精度限制 | 否 |
-        | `row must greater than 1` | `row` 必须 >= 2 | 否 |
-        | `row must less than 501` | `row` 必须 <= 500 | 否 |
-        | `invalid leverage` | `leverage` 超出交易对允许的杠杆范围 | 否 |
-        | `extra_margin should greater than or equal 0` | `extra_margin_amount` 必须 >= 0 | 否 |
-        | `invalid condition_direction` | `condition_direction` 必须为 `""`、`"1"` 或 `"-1"` | 否 |
-        | `quote_investment not match spending precision: max {N} decimal places` | `quote_investment` 小数位数超过限制 | 是 |
-        | `extra_margin_amount not match spending precision: max {N} decimal places` | `extra_margin_amount` 小数位数超过限制 | 是 |
-        | `grid profit per volume less than 0` | 网格区间过小或 `row` 过多，导致单格利润 < 0 | 是 |
-        | `less than min investment` | `quote_investment` 为 `"0"` 或小于 `min_investment` | 是 |
+        | `base should end with .PERP` | `base` must end with `.PERP`, e.g. `BTC.PERP` | No |
+        | `invalid trend` | `trend` must be `long`, `short`, or `no_trend` | No |
+        | `invalid grid_type` | `grid_type` must be `arithmetic` or `geometric` | No |
+        | `bottom must greater than 0` | `bottom` must be a positive number | No |
+        | `top must greater than bottom` | `top` must be strictly greater than `bottom` | No |
+        | `top must less or equal than max:{maxPrice}` | `top` exceeds the symbol's maximum allowed price | No |
+        | `top not match quote precision` | `top` has more decimal places than the symbol allows | No |
+        | `bottom not match quote precision` | `bottom` has more decimal places than the symbol allows | No |
+        | `row must greater than 1` | `row` must be >= 2 | No |
+        | `row must less than 501` | `row` must be <= 500 | No |
+        | `invalid leverage` | `leverage` is outside the symbol's allowed leverage range | No |
+        | `extra_margin should greater than or equal 0` | `extra_margin_amount` must be >= 0 | No |
+        | `invalid condition_direction` | `condition_direction` must be `""`, `"1"`, or `"-1"` | No |
+        | `quote_investment not match spending precision: max {N} decimal places` | `quote_investment` exceeds the allowed decimal precision | Yes |
+        | `extra_margin_amount not match spending precision: max {N} decimal places` | `extra_margin_amount` exceeds the allowed decimal precision | Yes |
+        | `grid profit per volume less than 0` | Grid range too narrow or `row` too large — profit per grid is negative | Yes |
+        | `less than min investment` | `quote_investment` is `"0"` or less than `min_investment` | Yes |
       operationId: checkFuturesGridParams
       security:
         - apiKey: []
@@ -509,23 +510,24 @@ paths:
         Pass a positive `quote_total_investment` to receive full estimate fields.
         The current market price is fetched automatically — `open_price` is not required.
 
-        **FailedWithData 响应**：下表中标注"是"的错误，虽然 `result=false`，但响应体仍包含 `data` 字段，
-        内含 `min_investment`、`max_investment`、`slippage`，供前端展示投资范围参考。
+        **FailedWithData**: For errors marked "Yes" below, the response includes a `data` field
+        even when `result=false`, containing `min_investment`, `max_investment`, and `slippage`
+        so the client can display the valid investment range.
 
         **Validation error messages** (returned in `message` when `result` is `false`):
 
-        | Message | Cause | 含 data |
+        | Message | Cause | Includes data |
         |---|---|---|
-        | `number invalid: {value}` | `top` 或 `bottom` 不是合法数字字符串 | 否 |
-        | `number int too long: {value}` | `top` 或 `bottom` 整数部分超过 15 位 | 否 |
-        | `number decimal too long: {value}` | `top` 或 `bottom` 小数部分超过 15 位 | 否 |
-        | `invalid quote total investment` | `quote_total_investment` 必须 >= 0 | 否 |
-        | `bottom must be less than top` | `bottom` 必须严格小于 `top` | 否 |
-        | `row must be between 2 and 1000` | `row` 必须在 [2, 1000] 范围内 | 否 |
-        | `invalid grid_type` | `grid_type` 必须为 `arithmetic` 或 `geometric` | 否 |
-        | `grid price duplicated: reduce row or widen range` | 区间过小或 `row` 过多，导致相邻网格价格重复 | 是 |
-        | `quote_total_investment not match quote precision: max {N} decimal places` | `quote_total_investment` 小数位数超过限制 | 是 |
-        | `less than min investment` | `quote_total_investment` 为 `"0"` 或小于 `min_investment` | 是 |
+        | `number invalid: {value}` | `top` or `bottom` is not a valid numeric string | No |
+        | `number int too long: {value}` | Integer part of `top` or `bottom` exceeds 15 digits | No |
+        | `number decimal too long: {value}` | Decimal part of `top` or `bottom` exceeds 15 digits | No |
+        | `invalid quote total investment` | `quote_total_investment` must be >= 0 | No |
+        | `bottom must be less than top` | `bottom` must be strictly less than `top` | No |
+        | `row must be between 2 and 1000` | `row` must be in the range [2, 1000] | No |
+        | `invalid grid_type` | `grid_type` must be `arithmetic` or `geometric` | No |
+        | `grid price duplicated: reduce row or widen range` | Grid range too narrow or `row` too large — adjacent grid prices are identical | Yes |
+        | `quote_total_investment not match quote precision: max {N} decimal places` | `quote_total_investment` exceeds the allowed decimal precision | Yes |
+        | `less than min investment` | `quote_total_investment` is `"0"` or less than `min_investment` | Yes |
       operationId: checkSpotGridParams
       security:
         - apiKey: []
@@ -1486,10 +1488,10 @@ components:
           description: "Manual extra margin amount. Only applies when `extra_margin=false`. Must be >= 0. Omit or pass empty string to use 0."
         condition:
           type: string
-          description: 触发价。设置后机器人在价格达到触发价时才开始运行。
+          description: Trigger price. When set, the bot starts only after the price reaches this level.
         condition_direction:
           type: string
-          description: "触发方向：`\"-1\"` 价格跌至触发价，`\"1\"` 价格涨至触发价"
+          description: "Trigger direction: `\"-1\"` price drops to trigger level, `\"1\"` price rises to trigger level"
           enum: ["-1", "1"]
 
     AdjustFuturesGridRequest:
@@ -2058,10 +2060,10 @@ components:
           example: "100"
         condition:
           type: string
-          description: 触发价。设置后机器人在价格达到触发价时才开始运行。
+          description: Trigger price. When set, the bot starts only after the price reaches this level.
         condition_direction:
           type: string
-          description: "触发方向：`\"-1\"` 价格跌至触发价，`\"1\"` 价格涨至触发价"
+          description: "Trigger direction: `\"-1\"` price drops to trigger level, `\"1\"` price rises to trigger level"
           enum: ["-1", "1"]
 
     AdjustSpotGridParamsRequest:
@@ -2170,14 +2172,14 @@ components:
       description: |
         Futures grid parameter check result data.
 
-        **result=true 时**：所有字段均已填充（包含完整 estimate 数据）。
-        当 `quote_investment` 超出 [`min_investment`, `max_investment`] 范围时，清算价格字段将被置空。
+        **When result=true**: All fields are populated with full estimate data.
+        Liquidation price fields are cleared when `quote_investment` is outside [`min_investment`, `max_investment`].
 
-        **result=false 且含 data 时**（FailedWithData）：仅 `min_investment`、`max_investment`、`slippage` 有效，
-        其余 estimate 字段为空。此时 `message` 为以下之一：
-        `"quote_investment not match spending precision: max {N} decimal places"`、
-        `"extra_margin_amount not match spending precision: max {N} decimal places"`、
-        `"grid profit per volume less than 0"`、`"less than min investment"`。
+        **When result=false with data (FailedWithData)**: Only `min_investment`, `max_investment`, and `slippage`
+        are valid; all other estimate fields are empty. This occurs when `message` is one of:
+        `"quote_investment not match spending precision: max {N} decimal places"`,
+        `"extra_margin_amount not match spending precision: max {N} decimal places"`,
+        `"grid profit per volume less than 0"`, or `"less than min investment"`.
       properties:
         min_investment:
           type: string
@@ -2223,12 +2225,12 @@ components:
       description: |
         Spot grid parameter check result data.
 
-        **result=true 时**：所有字段均已填充。
+        **When result=true**: All fields are populated.
 
-        **result=false 且含 data 时**（FailedWithData）：仅 `min_investment`、`max_investment`、`slippage` 有效，
-        其余 estimate 字段为空。此时 `message` 为以下之一：
-        `"grid price duplicated: reduce row or widen range"`、
-        `"quote_total_investment not match quote precision: max {N} decimal places"`、`"less than min investment"`。
+        **When result=false with data (FailedWithData)**: Only `min_investment`, `max_investment`, and `slippage`
+        are valid; all other estimate fields are empty. This occurs when `message` is one of:
+        `"grid price duplicated: reduce row or widen range"`,
+        `"quote_total_investment not match quote precision: max {N} decimal places"`, or `"less than min investment"`.
       properties:
         min_investment:
           type: string
