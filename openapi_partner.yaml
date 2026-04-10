@@ -65,6 +65,7 @@ info:
     Each API Key can be configured with **`Partner reading`** permission. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
 
     **Endpoints requiring `Partner reading` permission:**
+    - `GET /api/v1/partner/kol/checkQualification` — Check user qualification
     - `GET /api/v1/partner/kol/inviteTradeStat` — Get user trading volume
 
   version: 1.0.0
@@ -126,6 +127,47 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/partner/kol/checkQualification:
+    get:
+      tags: [Partner]
+      summary: Check user qualification
+      description: "Check whether a user is affiliated with the partner and verify their qualification status. Weight: 1."
+      operationId: checkUserQualification
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: uid
+          in: query
+          required: true
+          description: The user UID to verify affiliation and qualification status
+          schema:
+            type: string
+          example: "123456789"
+        - name: bot_id
+          in: query
+          required: true
+          description: The bot/partner identifier making the request
+          schema:
+            type: string
+          example: "partner_bot_001"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CheckQualificationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   parameters:
     Timestamp:
@@ -155,6 +197,14 @@ components:
         message:
           type: string
           description: Error message (present only on failure)
+
+    CheckQualificationResponse:
+      type: object
+      description: User qualification check response
+      properties:
+        result:
+          type: boolean
+          description: Whether the user is affiliated with the requesting partner
 
     UserTradingStatItem:
       type: object
