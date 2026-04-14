@@ -73,6 +73,8 @@ info:
     - `GET /api/v1/bot/orders/spotGrid/aiStrategy` — Get spot grid AI strategy
     - `POST /api/v1/bot/orders/futuresGrid/checkParams` — Check futures grid parameters
     - `POST /api/v1/bot/orders/spotGrid/checkParams` — Check spot grid parameters
+    - `POST /api/v1/bot/orders/smartCopy/checkParams` — Check smart copy parameters
+    - `POST /api/v1/bot/signal/listener` — Push custom trading signal
 
     **Endpoints requiring `Bot trading` permission:**
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
@@ -84,6 +86,8 @@ info:
     - `POST /api/v1/bot/orders/spotGrid/investIn` — Add investment to spot grid
     - `POST /api/v1/bot/orders/spotGrid/cancel` — Cancel spot grid order
     - `POST /api/v1/bot/orders/spotGrid/profit` — Extract profit from spot grid
+    - `POST /api/v1/bot/orders/smartCopy/create` — Create smart copy order
+    - `POST /api/v1/bot/orders/smartCopy/cancel` — Cancel smart copy order
   version: 1.0.0
   contact:
     name: Pionex API Support
@@ -102,6 +106,10 @@ tags:
     description: Futures Grid Bot management (private)
   - name: Spot Grid
     description: Spot Grid Bot management (private)
+  - name: Smart Copy
+    description: Smart Copy Bot management (private)
+  - name: Signal
+    description: Custom signal listener (private)
 
 paths:
   /api/v1/bot/orders:
@@ -686,6 +694,149 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/TransferRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # Smart Copy
+  # -------------------------------------------------------------------------
+
+  /api/v1/bot/orders/smartCopy/checkParams:
+    post:
+      tags: [Smart Copy]
+      summary: Check smart copy parameters
+      description: |
+        Validate smart copy bot creation parameters and check the maximum investment limit. Weight: 1.
+
+        **Requires `Bot reading` permission.**
+
+        Returns the maximum allowed investment, maximum leverage, and notional/available limits for the given base/quote/signal combination.
+      operationId: checkSmartCopyParams
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckSmartCopyParamsRequest'
+      responses:
+        '200':
+          description: Check result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CheckSmartCopyParamsData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/smartCopy/create:
+    post:
+      tags: [Smart Copy]
+      summary: Create smart copy order
+      description: "Create a new smart copy bot order. Weight: 1."
+      operationId: createSmartCopyOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSmartCopyOrderRequest'
+      responses:
+        '200':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CreateSmartCopyOrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/smartCopy/cancel:
+    post:
+      tags: [Smart Copy]
+      summary: Cancel smart copy order
+      description: "Close and cancel a smart copy bot order. Weight: 1."
+      operationId: cancelSmartCopyOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSmartCopyOrderRequest'
+      responses:
+        '200':
+          description: Order cancelled successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CancelSmartCopyOrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # Signal
+  # -------------------------------------------------------------------------
+
+  /api/v1/bot/signal/listener:
+    post:
+      tags: [Signal]
+      summary: Push custom trading signal
+      description: |
+        Push a custom trading signal to drive smart copy orders. Weight: 1.
+
+        **Requires `Bot reading` permission.** Signal sending must additionally be enabled for your account — contact [open@pionex.com](mailto:open@pionex.com) to request access.
+      operationId: signalListener
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalListenerRequest'
+      responses:
+        '200':
+          description: Signal received successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2252,3 +2403,232 @@ components:
 
     CheckParamsResponse:
       $ref: '#/components/schemas/SpotGridCheckParamsData'
+
+    # =========================================================================
+    # Smart Copy schemas
+    # =========================================================================
+
+    CheckSmartCopyParamsRequest:
+      type: object
+      required: [base, quote, leverage, quote_investment]
+      properties:
+        base:
+          type: string
+          description: Base currency (e.g. BTC)
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency (e.g. USDT)
+          example: USDT
+        signal_type:
+          type: string
+          description: Signal type identifier. Optional — omit to check without a specific signal.
+        signal_param:
+          type: string
+          description: Signal parameters JSON string. Optional.
+        leverage:
+          type: integer
+          format: int64
+          description: Leverage multiplier (>= 1)
+          minimum: 1
+          example: 2
+        quote_investment:
+          type: string
+          description: Investment amount in quote currency to check against limits.
+          example: "500"
+
+    CheckSmartCopyParamsData:
+      type: object
+      description: Smart copy parameter check result data.
+      properties:
+        result:
+          type: boolean
+          description: Whether the investment is within limits
+        max_investment:
+          type: string
+          description: Maximum allowed investment amount in quote currency
+          example: "10000"
+        max_leverage:
+          type: string
+          description: Maximum allowed leverage
+          example: "10"
+        notional_limit:
+          type: string
+          description: Total notional limit (quote_investment * leverage ceiling)
+          example: "100000"
+        available_limit:
+          type: string
+          description: Remaining available notional for this base/quote/signal combination
+          example: "80000"
+
+    CreateSmartCopyOrderRequest:
+      type: object
+      required: [base, quote, bu_order_data]
+      properties:
+        base:
+          type: string
+          description: Base currency (e.g. BTC)
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency (e.g. USDT)
+          example: USDT
+        key_id:
+          type: string
+          description: API Key ID. Optional — derived from the API key used for authentication when omitted.
+        note:
+          type: string
+          description: Optional order note
+        copy_from:
+          type: string
+          description: Source order ID to copy from (for copy trade orders)
+        copy_type:
+          type: string
+          description: Copy type identifier
+        bu_order_data:
+          $ref: '#/components/schemas/CreateSmartCopyOrderBuOrderData'
+
+    CreateSmartCopyOrderBuOrderData:
+      type: object
+      required: [quote_total_investment, portfolio]
+      properties:
+        quote_total_investment:
+          type: string
+          description: Total investment amount in quote currency
+          example: "500"
+        compound:
+          type: boolean
+          description: Whether to enable compound interest (reinvest profits)
+          default: false
+        profit_stop_maker:
+          type: boolean
+          description: Whether to enable profit stop maker
+          default: false
+        portfolio:
+          type: array
+          description: List of portfolio items (at least 1 required)
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SmartCopyPortfolioItemRequest'
+
+    SmartCopyPortfolioItemRequest:
+      type: object
+      required: [base, signal_type, leverage]
+      properties:
+        base:
+          type: string
+          description: Base currency for this portfolio item
+          example: BTC
+        signal_type:
+          type: string
+          description: Signal type identifier
+          example: my_signal
+        signal_param:
+          type: string
+          description: Signal parameters JSON string. Optional.
+          example: '{"direction":"long"}'
+        percent:
+          type: string
+          description: Allocation percentage of total investment for this item (e.g. "1" = 100%)
+          example: "1"
+        leverage:
+          type: integer
+          format: int64
+          description: Leverage multiplier for this item (>= 1)
+          minimum: 1
+          example: 2
+        profit_stop_ratio:
+          type: string
+          description: Take profit ratio (e.g. "0.5" = 50% profit triggers close)
+        loss_stop_ratio:
+          type: string
+          description: Stop loss ratio (e.g. "-0.2" = 20% loss triggers close)
+
+    CreateSmartCopyOrderResponse:
+      type: object
+      properties:
+        bu_order_id:
+          type: string
+          description: Created bot order ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    CancelSmartCopyOrderRequest:
+      type: object
+      required: [bu_order_id]
+      properties:
+        bu_order_id:
+          type: string
+          description: Bot order ID to cancel
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        close_note:
+          type: string
+          description: Optional close reason note
+        convert_into_earn_coin:
+          type: boolean
+          description: Whether to convert remaining assets into earn coin on close
+          default: false
+
+    CancelSmartCopyOrderResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Whether the cancellation was accepted
+
+    # =========================================================================
+    # Signal schemas
+    # =========================================================================
+
+    SignalListenerRequest:
+      type: object
+      required: [signalType, signalParam, base, quote, time, price, data]
+      properties:
+        signalType:
+          type: string
+          description: Signal type identifier (ASCII, max 1000 chars)
+          example: my_signal
+        signalParam:
+          type: string
+          description: Signal parameters (ASCII, max 5000 chars)
+          example: "{}"
+        base:
+          type: string
+          description: Base currency (e.g. BTC)
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency (e.g. USDT)
+          example: USDT
+        time:
+          type: string
+          format: date-time
+          description: Signal trigger time (RFC3339)
+          example: "2024-01-15T10:30:00Z"
+        price:
+          type: string
+          description: Price at signal trigger time (ASCII, max 30 chars)
+          example: "45000.5"
+        data:
+          $ref: '#/components/schemas/SignalListenerData'
+
+    SignalListenerData:
+      type: object
+      required: [action, position_size, contracts]
+      properties:
+        action:
+          type: string
+          description: Trading action
+          enum: [buy, sell]
+          example: buy
+        position_size:
+          type: string
+          description: Position size as a ratio or absolute value
+          example: "1"
+        contracts:
+          type: string
+          description: Number of contracts
+          example: "1"
+        direction:
+          type: string
+          description: Optional trading direction hint
+          example: long
