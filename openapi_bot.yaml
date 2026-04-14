@@ -74,6 +74,7 @@ info:
     - `POST /api/v1/bot/orders/futuresGrid/checkParams` — Check futures grid parameters
     - `POST /api/v1/bot/orders/spotGrid/checkParams` — Check spot grid parameters
     - `POST /api/v1/bot/orders/smartCopy/checkParams` — Check smart copy parameters
+    - `GET /api/v1/bot/orders/smartCopy/order` — Get smart copy order
 
     **Endpoints requiring `Enable reading` permission:**
     - `POST /api/v1/bot/signal/listener` — Push custom trading signal
@@ -704,6 +705,44 @@ paths:
   # -------------------------------------------------------------------------
   # Smart Copy
   # -------------------------------------------------------------------------
+
+  /api/v1/bot/orders/smartCopy/order:
+    get:
+      tags: [Smart Copy]
+      summary: Get smart copy order
+      description: "Query a smart copy bot order by ID. Weight: 1."
+      operationId: getSmartCopyOrder
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: buOrderId
+          in: query
+          required: true
+          description: Bot order ID (UUID, 36 chars)
+          schema:
+            type: string
+        - name: lang
+          in: query
+          description: Language code (e.g. en, zh)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SmartCopyOrderDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api/v1/bot/orders/smartCopy/checkParams:
     post:
@@ -2576,6 +2615,245 @@ components:
         success:
           type: boolean
           description: Whether the cancellation was accepted
+
+    SmartCopyOrderDetail:
+      type: object
+      description: Smart copy bot order detail
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        buOrderType:
+          type: string
+          description: Bot order type (always `smart_copy`)
+        userId:
+          type: string
+          description: User ID
+        keyId:
+          type: string
+          description: API Key ID
+        exchange:
+          type: string
+          description: Exchange identifier
+          example: pionex.v2
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        status:
+          type: string
+          description: Order status
+        createTime:
+          type: integer
+          format: int64
+          description: Creation timestamp in milliseconds
+        closeTime:
+          type: integer
+          format: int64
+          description: Close timestamp in milliseconds
+        copyFrom:
+          type: string
+          description: Source order ID (for copy trade orders)
+        copyType:
+          type: string
+          description: Copy type
+        strategyId:
+          type: string
+          description: Strategy ID
+        canceling:
+          type: integer
+          format: int64
+          description: Canceling flag
+        note:
+          type: string
+          description: Order note
+        closeNote:
+          type: string
+          description: Close note
+        customizeName:
+          type: string
+          description: Custom name
+        buOrderData:
+          $ref: '#/components/schemas/SmartCopyOrderData'
+
+    SmartCopyOrderData:
+      type: object
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        kolSignalId:
+          type: string
+          description: KOL signal ID
+        quoteTotalInvestment:
+          type: string
+          description: Current total investment in quote currency
+        quoteOriginalInvestment:
+          type: string
+          description: Original investment amount in quote currency
+        currentQuoteAmount:
+          type: string
+          description: Current quote amount in the bot account
+        initQuotePrice:
+          type: string
+          description: Quote/USDT price at order creation
+        closedQuoteAmount:
+          type: string
+          description: Quote amount returned on close
+        closedQuotePrice:
+          type: string
+          description: Quote/USDT price at close
+        convertIntoEarnCoin:
+          type: integer
+          format: int64
+          description: Whether assets were converted to earn coin on close
+        reasonBy:
+          type: string
+          description: Close reason (e.g. `user_cancel`, `create_failed`)
+        profit:
+          type: string
+          description: Total profit in quote currency
+        status:
+          type: string
+          description: Order data status
+        shareRatio:
+          type: string
+          description: Profit sharing ratio
+        sharedProfit:
+          type: string
+          description: Total profit shared
+        closedSharedQuote:
+          type: string
+          description: Quote amount deducted for profit sharing on close
+        tradeType:
+          type: string
+          description: "Trade type: `futures` or `spot`"
+          enum: [futures, spot]
+        fundingFee:
+          type: string
+          description: Total funding fee paid
+        roundCount24h:
+          type: integer
+          format: int64
+          description: Number of completed signal rounds in the last 24 hours
+        kolName:
+          type: string
+          description: KOL name
+        kolImage:
+          type: string
+          description: KOL avatar URL
+        signalName:
+          type: string
+          description: Signal display name
+        market:
+          type: string
+          description: Market type
+        portfolio:
+          type: array
+          description: Portfolio item details
+          items:
+            $ref: '#/components/schemas/SmartCopyPortfolioItem'
+
+    SmartCopyPortfolioItem:
+      type: object
+      properties:
+        tradeBase:
+          type: string
+          description: Actual trading base currency
+        buOrderId:
+          type: string
+          description: Bot order ID
+        base:
+          type: string
+          description: Base currency for this portfolio item
+        signalType:
+          type: string
+          description: Signal type identifier
+        signalParam:
+          type: string
+          description: Signal parameters
+        percent:
+          type: string
+          description: Allocation percentage
+        initPrice:
+          type: string
+          description: Price at position open
+        closedPrice:
+          type: string
+          description: Price at position close
+        currentBaseAmount:
+          type: string
+          description: Current base amount held
+        closedBaseAmount:
+          type: string
+          description: Base amount returned on close
+        closedQuoteAmount:
+          type: string
+          description: Quote amount returned on close
+        totalFeeInBase:
+          type: string
+          description: Total trading fees in base currency
+        totalFeeInQuote:
+          type: string
+          description: Total trading fees in quote currency
+        profit:
+          type: string
+          description: Profit for this portfolio item
+        roundCount:
+          type: integer
+          format: int64
+          description: Total completed signal rounds
+        currentRound:
+          type: integer
+          format: int64
+          description: Current signal round number
+        currentRoundMonth:
+          type: string
+          description: Current round month label
+        status:
+          type: string
+          description: Portfolio item status
+        expiredAt:
+          type: integer
+          format: int64
+          description: Expiry timestamp in milliseconds (0 = no expiry)
+        sharedAmount:
+          type: string
+          description: Profit sharing amount for this item
+        leverage:
+          type: integer
+          format: int64
+          description: Leverage multiplier
+        fundingFee:
+          type: string
+          description: Funding fee for this item
+        qtyLong:
+          type: string
+          description: Long position quantity
+        qtyShort:
+          type: string
+          description: Short position quantity
+        amountLong:
+          type: string
+          description: Long position amount in quote
+        amountShort:
+          type: string
+          description: Short position amount in quote
+        amountSettle:
+          type: string
+          description: Settlement amount
+        maintPrice:
+          type: string
+          description: Maintenance margin price
+        profitRoundCount:
+          type: integer
+          format: int64
+          description: Number of profitable rounds
+        profitPositive:
+          type: string
+          description: Total positive profit accumulated
 
     # =========================================================================
     # Signal schemas
