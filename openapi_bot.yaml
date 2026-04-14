@@ -64,7 +64,7 @@ info:
 
     ### API Key Permissions
 
-    Each API Key can be configured with **Bot reading** and/or **Bot trading** permissions. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
+    Each API Key can be configured with **Bot reading**, **Bot trading**, and/or **Enable reading** permissions. Make sure your API Key has the appropriate permission enabled before calling the following endpoints.
 
     **Endpoints requiring `Bot reading` permission:**
     - `GET /api/v1/bot/orders` — Get bot order list
@@ -74,6 +74,8 @@ info:
     - `POST /api/v1/bot/orders/futuresGrid/checkParams` — Check futures grid parameters
     - `POST /api/v1/bot/orders/spotGrid/checkParams` — Check spot grid parameters
     - `POST /api/v1/bot/orders/smartCopy/checkParams` — Check smart copy parameters
+
+    **Endpoints requiring `Enable reading` permission:**
     - `POST /api/v1/bot/signal/listener` — Push custom trading signal
 
     **Endpoints requiring `Bot trading` permission:**
@@ -818,7 +820,7 @@ paths:
       description: |
         Push a custom trading signal to drive smart copy orders. Weight: 1.
 
-        **Requires `Bot reading` permission.** Signal sending must additionally be enabled for your account — contact [open@pionex.com](mailto:open@pionex.com) to request access.
+        **Requires `Enable reading` permission.** Signal sending must additionally be enabled for your account — contact [open@pionex.com](mailto:open@pionex.com) to request access.
       operationId: signalListener
       security:
         - apiKey: []
