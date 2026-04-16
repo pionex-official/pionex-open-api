@@ -9,7 +9,7 @@ info:
 
     ## Connection Endpoints
 
-    > **Note:** The Futures API is currently in **Beta**. If you would like to use it, please contact us at [open@pionex.com](mailto:open@pionex.com).
+    > **Note:** The Partner API is currently **Invite Only**.
 
     - **Public stream**: `wss://ws.pionex.com/wsPub` (no authentication)
     - **Private stream**: `wss://ws.pionex.com/wsUA` (requires authentication)
