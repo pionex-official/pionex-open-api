@@ -1575,8 +1575,8 @@ components:
           description: "Investment currency: `USDT` or quote currency (default)"
         investmentFrom:
           type: string
-          description: "Funding source: `USER` (default), `LOCK_ACTIVITY`, `FUTURE_GRID_BONUS`"
-          enum: [USER, LOCK_ACTIVITY, FUTURE_GRID_BONUS]
+          description: "Funding source: `USER` (default), `FUTURE_GRID_BONUS`"
+          enum: [USER, FUTURE_GRID_BONUS]
         uiInvestCoin:
           type: string
           description: Frontend-recorded investment currency type (stored only)
