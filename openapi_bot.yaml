@@ -111,6 +111,8 @@ tags:
     description: Smart Copy Bot management (private)
   - name: Signal
     description: Custom signal listener (private)
+  - name: KOL
+    description: KOL data endpoints (private)
 
 paths:
   /api/v1/bot/orders:
@@ -851,6 +853,92 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CancelSmartCopyOrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # -------------------------------------------------------------------------
+  # KOL
+  # -------------------------------------------------------------------------
+
+  /api/v1/bot/kol/selectCopyTradeList:
+    get:
+      tags: [KOL]
+      summary: Get KOL curated copy-trade order list
+      description: "Query a KOL's curated/pinned copy-trade order list by share code, with optional filters by symbol, trend, and leverage. Supports pagination and sorting. Weight: 1."
+      operationId: getKolSelectCopyTradeList
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: shareCode
+          in: query
+          required: true
+          description: KOL share code
+          schema:
+            type: string
+        - name: buOrderType
+          in: query
+          required: true
+          description: Bot order type filter
+          schema:
+            type: string
+        - name: symbol
+          in: query
+          description: Trading symbol filter
+          schema:
+            type: string
+        - name: trend
+          in: query
+          description: Grid trend filter (e.g. long, short, no_trend)
+          schema:
+            type: string
+        - name: leverage
+          in: query
+          description: Leverage filter
+          schema:
+            type: integer
+            format: int64
+        - name: pageToken
+          in: query
+          description: Pagination token
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: Sort field
+          schema:
+            type: string
+        - name: direction
+          in: query
+          description: Sort direction (e.g. asc, desc)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size
+          schema:
+            type: integer
+            format: int64
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/KolSelectCopyTradeListData'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2890,6 +2978,218 @@ components:
         profitPositive:
           type: string
           description: Total positive profit accumulated
+
+    # =========================================================================
+    # KOL schemas
+    # =========================================================================
+
+    KolSelectCopyTradeListData:
+      type: object
+      description: KOL curated copy-trade order list response
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Total number of matching orders
+        page:
+          type: integer
+          format: int64
+          description: Current page number
+        hasMore:
+          type: boolean
+          description: Whether more pages are available
+        filterOptions:
+          $ref: '#/components/schemas/KolFilterOptions'
+        kolInfo:
+          $ref: '#/components/schemas/KolInfo'
+        results:
+          type: array
+          description: Curated copy-trade orders
+          items:
+            $ref: '#/components/schemas/KolCopyTradeOrder'
+        topResults:
+          type: array
+          description: Pinned/top copy-trade orders
+          items:
+            $ref: '#/components/schemas/KolCopyTradeOrder'
+
+    KolFilterOptions:
+      type: object
+      description: Available filter options for the KOL's orders
+      properties:
+        symbolList:
+          type: array
+          description: Available symbol filters
+          items:
+            type: string
+        leverageList:
+          type: array
+          description: Available leverage filters
+          items:
+            type: integer
+            format: int64
+        trendList:
+          type: array
+          description: Available trend filters
+          items:
+            type: string
+
+    KolInfo:
+      type: object
+      description: KOL profile information
+      properties:
+        nickname:
+          type: string
+          description: KOL nickname
+        shareCode:
+          type: string
+          description: KOL share code
+        headerImg:
+          type: string
+          description: KOL header image URL
+        isShowInvestment:
+          type: boolean
+          description: Whether investment amounts are shown
+        avatar:
+          type: string
+          description: KOL avatar URL
+        userId:
+          type: string
+          description: KOL user ID
+        isShowGroupEntry:
+          type: integer
+          format: int64
+          description: Whether the group entry is shown
+        groupInfoList:
+          type: array
+          description: KOL community group list
+          items:
+            $ref: '#/components/schemas/KolGroupInfo'
+
+    KolGroupInfo:
+      type: object
+      description: KOL community group info
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Group ID
+        userId:
+          type: string
+          description: KOL user ID
+        community:
+          type: string
+          description: Community name
+        rank:
+          type: integer
+          format: int64
+          description: Group rank
+        link:
+          type: string
+          description: Community link
+        createTime:
+          type: string
+          description: Creation time (RFC3339)
+          example: "0001-01-01T00:00:00Z"
+        updateTime:
+          type: string
+          description: Update time (RFC3339)
+          example: "0001-01-01T00:00:00Z"
+        picUrl:
+          type: string
+          description: Community picture URL
+
+    KolCopyTradeOrder:
+      type: object
+      description: A KOL curated copy-trade order entry
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+        buOrderType:
+          type: string
+          description: Bot order type
+        rank:
+          type: integer
+          format: int64
+          description: Order rank
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        uniqueId:
+          type: string
+          description: Unique identifier
+        status:
+          type: string
+          description: Order status
+        createTime:
+          type: integer
+          format: int64
+          description: Creation timestamp in milliseconds
+        closeTime:
+          type: integer
+          format: int64
+          description: Close timestamp in milliseconds
+        isTop:
+          type: boolean
+          description: Whether the order is pinned/top
+        buOrderData:
+          $ref: '#/components/schemas/KolCopyTradeOrderData'
+
+    KolCopyTradeOrderData:
+      type: object
+      description: KOL copy-trade order detail data
+      properties:
+        quoteInvestment:
+          type: string
+          description: Investment amount in quote currency
+        extraMargin:
+          type: string
+          description: Extra margin amount
+        top:
+          type: string
+          description: Grid upper price
+        bottom:
+          type: string
+          description: Grid lower price
+        row:
+          type: integer
+          format: int64
+          description: Number of grid levels
+        gridApr:
+          type: string
+          description: Grid APR
+        trend:
+          type: string
+          description: Grid direction (e.g. long, short, no_trend)
+        leverage:
+          type: string
+          description: Leverage multiplier
+        initPrice:
+          type: string
+          description: Price at order creation
+        curPrice:
+          type: string
+          description: Current price
+        rota:
+          type: string
+          description: Return on total assets
+        uiExtraData:
+          type: string
+          description: Frontend extra data
+        triggerTime:
+          type: integer
+          format: int64
+          description: Trigger timestamp in milliseconds
+        condition:
+          type: string
+          description: Trigger price (for conditional orders)
+        conditionDirection:
+          type: string
+          description: "Trigger direction: \"-1\" (price drops to) or \"1\" (price rises to)"
 
     # =========================================================================
     # Signal schemas
