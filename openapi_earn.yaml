@@ -1,0 +1,409 @@
+openapi: 3.0.3
+info:
+  title: Pionex Earn Open API - Arbitrage
+  description: |
+    Pionex Term Arbitrage Open API.
+
+    # General Info
+
+    ## Basic Info
+
+    > **Note:** The Arbitrage API is currently in **Beta**. If you would like to use it, please contact us at [open@pionex.com](mailto:open@pionex.com) with your UID and reason for applying.
+
+    **Base URL:** `https://api.pionex.com`
+
+    **Request Format:**
+    - For private requests, the `timestamp` parameter (in milliseconds) must be included in the query string. The timestamp is valid within a range of +/-20 seconds.
+    - Private requests require `PIONEX-KEY` (API Key) and `PIONEX-SIGNATURE` headers.
+    - GET requests: additional parameters are passed in the query string.
+    - POST requests: parameters are passed in the request body as JSON (`application/json`).
+    - Zero-valued number parameters are disregarded.
+
+    **Signature Construction:**
+    - GET: `METHOD + PATH_URL + QUERY + TIMESTAMP`
+    - POST: `METHOD + PATH_URL + QUERY + TIMESTAMP + body`
+
+    **Response Format:**
+
+    All responses are JSON objects containing:
+    - `result` (boolean): success indicator
+    - `timestamp` (number): response timestamp in milliseconds
+    - On success: `data` object with business information
+    - On failure: `code` (string) and `message` (string) with error details
+
+    Success example:
+    ```json
+    {"result": true, "data": {...}, "timestamp": 1566691672311}
+    ```
+
+    Failure example:
+    ```json
+    {"result": false, "code": "ARBITRAGE_PARAMETER_ERROR", "message": "invalid amount", "timestamp": 1566691672311}
+    ```
+
+    ## Rate Limits
+
+    - Each endpoint has a weight value that determines how many requests it counts toward the limit.
+    - IP-based and account-based limits operate independently.
+    - All endpoints share the 10 per second limit based on IP.
+    - Private endpoints share the 10 per second limit based on ACCOUNT.
+    - Exceeding the weight limit results in HTTP 429 status code.
+
+    ## Authentication
+
+    [API Key Guide](https://www.pionex.com/docs/api-docs/references/api-key-guide)
+
+    Private endpoints require HMAC SHA256 signature authentication.
+
+    **Required headers:**
+    - `PIONEX-KEY`: Your API Key
+    - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+    **Required query parameter:**
+    - `timestamp`: Current time in milliseconds (valid within +/-20 seconds)
+
+    ### API Key Permissions
+
+    **Endpoints requiring `Enable reading` permission:**
+    - `GET /api/v1/earn/arbitrage/fetchProducts` — List Arbitrage products
+    - `GET /api/v1/earn/arbitrage/fetchUserBalances` — Get user Arbitrage balances
+
+    **Endpoints requiring `Earn` permission:**
+    - `POST /api/v1/earn/arbitrage/stake` — Stake into an Arbitrage product
+    - `POST /api/v1/earn/arbitrage/unStake` — Redeem from an Arbitrage product
+  version: 1.0.0
+  contact:
+    name: Pionex API Support
+    url: https://t.me/pionexapi
+
+servers:
+  - url: https://api.pionex.com
+    description: Production
+
+security: []
+
+tags:
+  - name: Arbitrage
+    description: Term Arbitrage endpoints
+
+paths:
+  /api/v1/earn/arbitrage/fetchProducts:
+    get:
+      tags: [Arbitrage]
+      summary: List Arbitrage products
+      description: |
+        Returns the list of Term Arbitrage products currently available. Requires `View` permission. Weight: 1.
+
+        Example request:
+        ```
+        GET /api/v1/earn/arbitrage/fetchProducts?timestamp=1774959429596
+        ```
+      operationId: arbitrageFetchProducts
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Product list (pass-through of the upstream gRPC Products response)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/arbitrage/fetchUserBalances:
+    get:
+      tags: [Arbitrage]
+      summary: Get user Arbitrage balances
+      description: |
+        Returns the authenticated user's Term Arbitrage positions and balances. Requires `View` permission. Weight: 1.
+
+        Example request:
+        ```
+        GET /api/v1/earn/arbitrage/fetchUserBalances?timestamp=1774959429596
+        ```
+      operationId: arbitrageFetchUserBalances
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: User balances (pass-through of the upstream gRPC FetchUserBalancesResponse)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/arbitrage/stake:
+    post:
+      tags: [Arbitrage]
+      summary: Stake into an Arbitrage product
+      description: |
+        Subscribes to a Term Arbitrage product. Requires `Earn` permission. Weight: 1.
+
+        **Validation:**
+        - `amount` must be a valid decimal amount.
+        - `productId` must exist in the product list returned by `GET /api/v1/earn/arbitrage/fetchProducts`.
+        - `coin` must be one of `USDT` or `USDC`.
+
+        Example request body:
+        ```json
+        {
+          "productId": "ARB-USDT-30D",
+          "coin": "USDT",
+          "amount": "100"
+        }
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "request_id": "req-abcdef",
+            "status": "success",
+            "txid": "tx-123456"
+          },
+          "timestamp": 1774959429596
+        }
+        ```
+      operationId: arbitrageStake
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArbitrageStakeRequest'
+      responses:
+        '200':
+          description: Stake succeeded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ArbitrageTxData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/earn/arbitrage/unStake:
+    post:
+      tags: [Arbitrage]
+      summary: Redeem from an Arbitrage product
+      description: |
+        Redeems from a Term Arbitrage product. Requires `Earn` permission. Weight: 1.
+
+        **Validation:**
+        - `amount` must be a valid decimal amount.
+        - `productId` must exist in the product list returned by `GET /api/v1/earn/arbitrage/fetchProducts`.
+        - `coin` must be one of `USDT` or `USDC`.
+
+        Example request body:
+        ```json
+        {
+          "productId": "ARB-USDT-30D",
+          "coin": "USDT",
+          "amount": "100"
+        }
+        ```
+
+        Example response:
+        ```json
+        {
+          "result": true,
+          "data": {
+            "status": "success"
+          },
+          "timestamp": 1774959429596
+        }
+        ```
+      operationId: arbitrageUnStake
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArbitrageUnStakeRequest'
+      responses:
+        '200':
+          description: Redemption succeeded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ArbitrageUnStakeData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: PIONEX-KEY
+      description: |
+        API Key authentication. Requires two headers:
+        - `PIONEX-KEY`: Your API Key
+        - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+        And a `timestamp` query parameter (milliseconds).
+
+  parameters:
+    Timestamp:
+      name: timestamp
+      in: query
+      required: true
+      description: Current timestamp in milliseconds (valid range +/- 20 seconds)
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    BadRequest:
+      description: "Bad request — invalid parameters. Common error code: `ARBITRAGE_PARAMETER_ERROR`"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication failed — missing or invalid API Key / signature
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ─── Base ───────────────────────────────────────────────
+    BaseResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Whether the request succeeded
+          example: true
+        timestamp:
+          type: integer
+          format: int64
+          description: Response timestamp in milliseconds
+          example: 1774959429596
+
+    ErrorResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          example: false
+        code:
+          type: string
+          description: "Error code (e.g. `ARBITRAGE_PARAMETER_ERROR`)"
+          example: ARBITRAGE_PARAMETER_ERROR
+        message:
+          type: string
+          description: Human-readable error message
+          example: invalid amount
+        timestamp:
+          type: integer
+          format: int64
+          example: 1774959429596
+
+    # ─── Arbitrage Requests ──────────────────────────────────
+    ArbitrageStakeRequest:
+      type: object
+      required: [productId, coin, amount]
+      properties:
+        productId:
+          type: string
+          description: "Product ID. Must exist in the product list from `/api/v1/earn/arbitrage/fetchProducts`."
+          example: ARB-USDT-30D
+        coin:
+          type: string
+          description: "Subscription currency. Only `USDT` or `USDC` are supported."
+          enum: [USDT, USDC]
+          example: USDT
+        amount:
+          type: string
+          description: Subscription amount as a decimal string
+          example: "100"
+
+    ArbitrageUnStakeRequest:
+      type: object
+      required: [productId, coin, amount]
+      properties:
+        productId:
+          type: string
+          description: "Product ID. Must exist in the product list from `/api/v1/earn/arbitrage/fetchProducts`."
+          example: ARB-USDT-30D
+        coin:
+          type: string
+          description: "Redemption currency. Only `USDT` or `USDC` are supported."
+          enum: [USDT, USDC]
+          example: USDT
+        amount:
+          type: string
+          description: Redemption amount as a decimal string
+          example: "100"
+
+    # ─── Arbitrage Responses ─────────────────────────────────
+    ArbitrageTxData:
+      type: object
+      properties:
+        request_id:
+          type: string
+          description: Request ID assigned by the upstream Arbitrage service
+          example: req-abcdef
+        status:
+          type: string
+          description: "Transaction status (e.g. `success`)"
+          example: success
+        txid:
+          type: string
+          description: Transaction ID
+          example: tx-123456
+
+    ArbitrageUnStakeData:
+      type: object
+      properties:
+        status:
+          type: string
+          description: "Transaction status (e.g. `success`)"
+          example: success
