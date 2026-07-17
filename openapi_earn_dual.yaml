@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Pionex Earn Open API - Dual Investment & Arbitrage
+  title: Pionex Earn Open API - Dual Investment
   description: |
-    Pionex Dual Investment & Arbitrage Open API.
+    Pionex Dual Investment Open API.
 
     # General Info
 
@@ -80,14 +80,6 @@ info:
     - `POST /api/v1/earn/dual/invest` — Create investment order
     - `DELETE /api/v1/earn/dual/invest` — Revoke investment order
     - `POST /api/v1/earn/dual/collect` — Collect settled earnings
-
-    **Arbitrage endpoints requiring `Enable reading` permission:**
-    - `GET /api/v1/earn/arbitrage/fetchProducts` — List Arbitrage products
-    - `GET /api/v1/earn/arbitrage/fetchUserBalances` — Get user Arbitrage balances
-
-    **Arbitrage endpoints requiring `Earn` permission:**
-    - `POST /api/v1/earn/arbitrage/stake` — Stake into an Arbitrage product
-    - `POST /api/v1/earn/arbitrage/unStake` — Redeem from an Arbitrage product
   version: 1.0.0
   contact:
     name: Pionex API Support
@@ -102,8 +94,6 @@ security: []
 tags:
   - name: Dual
     description: Dual Investment endpoints
-  - name: Arbitrage
-    description: Term Arbitrage endpoints
 
 paths:
   /api/v1/earn/dual/symbols:
@@ -863,194 +853,6 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /api/v1/earn/arbitrage/fetchProducts:
-    get:
-      tags: [Arbitrage]
-      summary: List Arbitrage products
-      description: |
-        Returns the list of Term Arbitrage products currently available. Requires `View` permission. Weight: 1.
-
-        Example request:
-        ```
-        GET /api/v1/earn/arbitrage/fetchProducts?timestamp=1774959429596
-        ```
-      operationId: arbitrageFetchProducts
-      security:
-        - apiKey: []
-      parameters:
-        - $ref: '#/components/parameters/Timestamp'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/BaseResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        description: Product list (pass-through of the upstream gRPC Products response)
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/earn/arbitrage/fetchUserBalances:
-    get:
-      tags: [Arbitrage]
-      summary: Get user Arbitrage balances
-      description: |
-        Returns the authenticated user's Term Arbitrage positions and balances. Requires `View` permission. Weight: 1.
-
-        Example request:
-        ```
-        GET /api/v1/earn/arbitrage/fetchUserBalances?timestamp=1774959429596
-        ```
-      operationId: arbitrageFetchUserBalances
-      security:
-        - apiKey: []
-      parameters:
-        - $ref: '#/components/parameters/Timestamp'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/BaseResponse'
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        description: User balances (pass-through of the upstream gRPC FetchUserBalancesResponse)
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/earn/arbitrage/stake:
-    post:
-      tags: [Arbitrage]
-      summary: Stake into an Arbitrage product
-      description: |
-        Subscribes to a Term Arbitrage product. Requires `Earn` permission. Weight: 1.
-
-        **Validation:**
-        - `amount` must be a valid decimal amount.
-        - `productId` must exist in the product list returned by `GET /api/v1/earn/arbitrage/fetchProducts`.
-        - `coin` must be one of `USDT` or `USDC`.
-
-        Example request body:
-        ```json
-        {
-          "productId": "ARB-USDT-30D",
-          "coin": "USDT",
-          "amount": "100"
-        }
-        ```
-
-        Example response:
-        ```json
-        {
-          "result": true,
-          "data": {
-            "request_id": "req-abcdef",
-            "status": "success",
-            "txid": "tx-123456"
-          },
-          "timestamp": 1774959429596
-        }
-        ```
-      operationId: arbitrageStake
-      security:
-        - apiKey: []
-      parameters:
-        - $ref: '#/components/parameters/Timestamp'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ArbitrageStakeRequest'
-      responses:
-        '200':
-          description: Stake succeeded
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/BaseResponse'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/ArbitrageTxData'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/earn/arbitrage/unStake:
-    post:
-      tags: [Arbitrage]
-      summary: Redeem from an Arbitrage product
-      description: |
-        Redeems from a Term Arbitrage product. Requires `Earn` permission. Weight: 1.
-
-        **Validation:**
-        - `amount` must be a valid decimal amount.
-        - `productId` must exist in the product list returned by `GET /api/v1/earn/arbitrage/fetchProducts`.
-        - `coin` must be one of `USDT` or `USDC`.
-
-        Example request body:
-        ```json
-        {
-          "productId": "ARB-USDT-30D",
-          "coin": "USDT",
-          "amount": "100"
-        }
-        ```
-
-        Example response:
-        ```json
-        {
-          "result": true,
-          "data": {
-            "status": "success"
-          },
-          "timestamp": 1774959429596
-        }
-        ```
-      operationId: arbitrageUnStake
-      security:
-        - apiKey: []
-      parameters:
-        - $ref: '#/components/parameters/Timestamp'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ArbitrageUnStakeRequest'
-      responses:
-        '200':
-          description: Redemption succeeded
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/BaseResponse'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/ArbitrageUnStakeData'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
 components:
   securitySchemes:
     apiKey:
@@ -1551,65 +1353,3 @@ components:
           type: string
           description: Client-assigned dual investment order ID
           example: my-order-001
-
-    # ─── Arbitrage Requests ──────────────────────────────────
-    ArbitrageStakeRequest:
-      type: object
-      required: [productId, coin, amount]
-      properties:
-        productId:
-          type: string
-          description: "Product ID. Must exist in the product list from `/api/v1/earn/arbitrage/fetchProducts`."
-          example: ARB-USDT-30D
-        coin:
-          type: string
-          description: "Subscription currency. Only `USDT` or `USDC` are supported."
-          enum: [USDT, USDC]
-          example: USDT
-        amount:
-          type: string
-          description: Subscription amount as a decimal string
-          example: "100"
-
-    ArbitrageUnStakeRequest:
-      type: object
-      required: [productId, coin, amount]
-      properties:
-        productId:
-          type: string
-          description: "Product ID. Must exist in the product list from `/api/v1/earn/arbitrage/fetchProducts`."
-          example: ARB-USDT-30D
-        coin:
-          type: string
-          description: "Redemption currency. Only `USDT` or `USDC` are supported."
-          enum: [USDT, USDC]
-          example: USDT
-        amount:
-          type: string
-          description: Redemption amount as a decimal string
-          example: "100"
-
-    # ─── Arbitrage Responses ─────────────────────────────────
-    ArbitrageTxData:
-      type: object
-      properties:
-        request_id:
-          type: string
-          description: Request ID assigned by the upstream Arbitrage service
-          example: req-abcdef
-        status:
-          type: string
-          description: "Transaction status (e.g. `success`)"
-          example: success
-        txid:
-          type: string
-          description: Transaction ID
-          example: tx-123456
-
-    ArbitrageUnStakeData:
-      type: object
-      properties:
-        status:
-          type: string
-          description: "Transaction status (e.g. `success`)"
-          example: success
