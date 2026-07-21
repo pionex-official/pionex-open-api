@@ -42,15 +42,19 @@ info:
     - All endpoints share the 10 per second limit based on IP.
     - Private endpoints share the 10 per second limit based on ACCOUNT.
     - Exceeding the weight limit results in HTTP 429 status code.
-
+  
     ## Authentication
 
-    Private endpoints require Trade Token authentication.
+    [API Key Guide](https://www.pionex.com/docs/api-docs/references/api-key-guide)
 
-    **Required header:**
-    - `Authorization: Bearer <trade_token>` — a Trade Token issued by the Pionex Trade Token Service
+    Private endpoints require HMAC SHA256 signature authentication.
 
-    The Trade Token is verified on every request and its payload identifies the acting user. Missing or malformed tokens are rejected with `BOT_INVALID_TOKEN`.
+    **Required headers:**
+    - `PIONEX-KEY`: Your API Key
+    - `PIONEX-SIGNATURE`: HMAC SHA256 hex signature
+
+    **Required query parameter:**
+    - `timestamp`: Current time in milliseconds (valid within +/-20 seconds)
 
     ### API Key Permissions
 
