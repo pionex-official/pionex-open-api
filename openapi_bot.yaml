@@ -73,16 +73,16 @@ info:
     - `POST /api/v1/bot/orders/spotGrid/checkParams` — Check spot grid parameters
     - `POST /api/v1/bot/orders/smartCopy/checkParams` — Check smart copy parameters
     - `GET /api/v1/bot/orders/smartCopy/order` — Get smart copy order
+    - `GET /api/v1/bot/signal/userSignal` — List user custom signals
+    - `GET /api/v1/bot/signal/userSignal/detail` — Get user custom signal detail
 
     **Endpoints requiring `Enable reading` permission:**
     - `POST /api/v1/bot/signal/listener` — Push custom trading signal
-    - `GET /signal/api/v1/user_signal/` — List user custom signals
-    - `POST /signal/api/v1/user_signal/` — Create user custom signal
-    - `GET /signal/api/v1/user_signal/{signal_type}` — Get user custom signal detail
-    - `POST /signal/api/v1/user_signal/{signal_type}/` — Edit user custom signal
-    - `DELETE /signal/api/v1/user_signal/{signal_type}/` — Delete user custom signal
 
     **Endpoints requiring `Bot trading` permission:**
+    - `POST /api/v1/bot/signal/userSignal` — Create user custom signal
+    - `POST /api/v1/bot/signal/userSignal/edit` — Edit user custom signal
+    - `DELETE /api/v1/bot/signal/userSignal/delete` — Delete user custom signal
     - `POST /api/v1/bot/orders/futuresGrid/create` — Create futures grid order
     - `POST /api/v1/bot/orders/futuresGrid/adjustParams` — Adjust futures grid (add investment / modify range)
     - `POST /api/v1/bot/orders/futuresGrid/reduce` — Reduce futures grid position
@@ -988,20 +988,20 @@ paths:
   # User-defined Signal Management
   # -------------------------------------------------------------------------
 
-  /signal/api/v1/user_signal/:
+  /api/v1/bot/signal/userSignal:
     get:
       tags: [Signal]
       summary: List user custom signals
       description: |
         Return a paginated list of user-defined signals. Weight: 1.
 
-        **Requires `Enable reading` permission.**
+        **Requires `Bot reading` permission.**
       operationId: listUserSignals
       security:
         - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Timestamp'
-        - name: page_token
+        - name: pageToken
           in: query
           required: false
           description: Pagination token returned by the previous response. Omit for the first page.
@@ -1030,7 +1030,7 @@ paths:
       description: |
         Create a new user-defined signal. Each user can have at most 100 signals. Weight: 1.
 
-        **Requires `Enable reading` permission.**
+        **Requires `Bot trading` permission.**
       operationId: createUserSignal
       security:
         - apiKey: []
@@ -1059,21 +1059,21 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /signal/api/v1/user_signal/{signal_type}:
+  /api/v1/bot/signal/userSignal/detail:
     get:
       tags: [Signal]
       summary: Get user custom signal detail
       description: |
         Return detail of a specific user-defined signal including webhook URL and message template. Weight: 1.
 
-        **Requires `Enable reading` permission.**
+        **Requires `Bot reading` permission.**
       operationId: getUserSignal
       security:
         - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Timestamp'
-        - name: signal_type
-          in: path
+        - name: signalType
+          in: query
           required: true
           description: Signal type identifier
           schema:
@@ -1095,14 +1095,14 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /signal/api/v1/user_signal/{signal_type}/:
+  /api/v1/bot/signal/userSignal/edit:
     post:
       tags: [Signal]
       summary: Edit user custom signal
       description: |
         Update the title and/or description of an existing user-defined signal. Weight: 1.
 
-        **Requires `Enable reading` permission.**
+        **Requires `Bot trading` permission.**
 
         At least one of `title` or `description` must be provided.
       operationId: editUserSignal
@@ -1110,8 +1110,8 @@ paths:
         - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Timestamp'
-        - name: signal_type
-          in: path
+        - name: signalType
+          in: query
           required: true
           description: Signal type identifier
           schema:
@@ -1134,29 +1134,30 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/bot/signal/userSignal/delete:
     delete:
       tags: [Signal]
       summary: Delete user custom signal
       description: |
         Delete a user-defined signal. Weight: 1.
 
-        **Requires `Enable reading` permission.**
+        **Requires `Bot trading` permission.**
 
-        Deletion is rejected if the signal has any non-cancelled orders. Error code `50010002` is returned with the open order count in `data.cnt`.
+        Deletion is rejected if the signal has any non-cancelled orders. Error code `SIGNAL_HAS_UNCLOSED_ORDERS` is returned with the open order count in `data.cnt`.
       operationId: deleteUserSignal
       security:
         - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Timestamp'
-        - name: signal_type
-          in: path
+        - name: signalType
+          in: query
           required: true
           description: Signal type identifier
           schema:
             type: string
       responses:
         '200':
-          description: Signal deleted successfully (or already inactive)
+          description: Signal deleted successfully
           content:
             application/json:
               schema:
@@ -3487,22 +3488,22 @@ components:
     TradingViewConfig:
       type: object
       properties:
-        webhook_url:
+        webhookUrl:
           type: string
           description: Webhook URL to configure in TradingView
           example: "https://www.pionex.com/signal/api/v1/signal_listener/trading_view?token=abc123"
         message:
           type: string
           description: JSON message template to use in TradingView alert
-          example: '{"signal_type":"my_signal","signal_param":"{}","symbol":"{{ticker}}","time":"{{timenow}}","price":"{{close}}","data":{"action":"{{strategy.order.action}}","contracts":"{{strategy.order.contracts}}","position_size":"{{strategy.position_size}}"}}'
+          example: '{"signalType":"my_signal","signalParam":"{}","symbol":"{{ticker}}","time":"{{timenow}}","price":"{{close}}","data":{"action":"{{strategy.order.action}}","contracts":"{{strategy.order.contracts}}","positionSize":"{{strategy.position_size}}"}}'
 
     UserSignalDetail:
       type: object
       properties:
-        signal_type:
+        signalType:
           type: string
           description: Signal type identifier (auto-generated)
-          example: us_a1b2c3d4
+          example: "79899b4d-7f95-4288-97ef-f021e770aa67"
         title:
           type: string
           description: Signal name
@@ -3511,21 +3512,21 @@ components:
           type: string
           description: Signal description
           example: RSI crossover strategy signal
-        confirm_config:
+        confirmConfig:
           type: integer
           description: "Whether the webhook is configured: 0 = not confirmed, 1 = confirmed"
           enum: [0, 1]
           example: 0
-        tradingview_config:
+        tradingviewConfig:
           $ref: '#/components/schemas/TradingViewConfig'
 
     UserSignalListResponse:
       type: object
       properties:
-        page_token:
+        pageToken:
           type: string
           description: Pagination token for the next page. Empty string when there are no more results.
-          example: "eyJuZXh0IjoxMCwibGltaXQiOjIwfQ=="
+          example: "eyJuZXh0IjoxMH0="
         signals:
           type: array
           description: List of user-defined signals
