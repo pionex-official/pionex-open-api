@@ -1548,7 +1548,7 @@ paths:
       description: |
         Push a custom trading signal to drive smart copy orders. Weight: 1.
 
-        **Requires `Enable reading` permission.** Signal sending must additionally be enabled for your account — contact [open@pionex.com](mailto:open@pionex.com) to request access.
+        **Requires `Enable reading` permission.**
       operationId: signalListener
       security:
         - apiKey: []
