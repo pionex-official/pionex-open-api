@@ -97,6 +97,7 @@ info:
     - `POST /api/v1/bot/orders/futuresGrid/addMargin` — Add margin to futures grid order
     - `POST /api/v1/bot/orders/futuresGrid/reduceMarginCheck` — Check futures grid reduce margin (dry-run)
     - `POST /api/v1/bot/orders/futuresGrid/reduceMargin` — Reduce margin of futures grid order
+    - `POST /api/v1/bot/orders/futuresGrid/updateTriggerProfitLoss` — Set / update / clear take-profit & stop-loss of a running futures grid order
     - `POST /api/v1/bot/orders/spotGrid/create` — Create spot grid order
     - `POST /api/v1/bot/orders/spotGrid/adjustParams` — Adjust spot grid parameters
     - `POST /api/v1/bot/orders/spotGrid/investIn` — Add investment to spot grid
@@ -806,6 +807,199 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/FuturesGridMarginTransferResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/futuresGrid/updateTriggerProfitLoss:
+    post:
+      tags: [Futures Grid]
+      summary: Set / update / clear take-profit & stop-loss
+      description: |
+        Set, update, or clear the take-profit and/or stop-loss of an **already running**
+        futures grid order. Weight: 1.
+
+        This does NOT create triggers for a not-yet-started order — use `create` (fields
+        `lossStopType` / `profitStopType` etc.) for that. This endpoint mutates the
+        take-profit / stop-loss of an existing order in place.
+
+        **Request field naming**: unlike the other `futuresGrid` endpoints (which use
+        camelCase), this endpoint takes **snake_case** field names, and the trigger
+        settings are passed as a `list` of items — one item per trigger you want to set.
+        A single call may contain a `stop_loss` item, a `stop_profit` item, or both.
+
+        **`type`** — which trigger the item configures. Only two values are accepted
+        (App-side legacy spellings such as `stop-loss` and the entry-trigger value
+        `condition` are rejected here):
+
+        | `type` | Meaning |
+        |---|---|
+        | `stop_loss` | Configure the stop-loss trigger |
+        | `stop_profit` | Configure the take-profit trigger |
+
+        **`stop_type`** — decides how `value` (and `limit_price`) is interpreted.
+        **Required**; unlike the App, an empty value is NOT accepted (no implicit
+        fallback to `price`):
+
+        | `stop_type` | `value` means | `limit_price` |
+        |---|---|---|
+        | `price` | Trigger price | ignored |
+        | `price_limit` | Trigger price; order is placed as a **limit** order at `limit_price` when hit | required |
+        | `profit_amount` | Profit/loss **amount** in the settlement currency | ignored |
+        | `profit_ratio` | Profit/loss **ratio** (e.g. `0.5` = +50%, `-0.2` = −20%) | ignored |
+
+        **Clearing a trigger**: pass `value` as an empty string `""` for that item to
+        remove the previously set take-profit / stop-loss.
+
+        **`value` validation**: when `value` is non-empty it only needs to be a valid
+        decimal — the endpoint does not enforce a positive value. `0` and negative values
+        are accepted (a stop-loss expressed as a negative `profit_ratio` / `profit_amount`
+        is meaningful).
+
+        **Neutral grid (`no_trend`) upper stop-loss**: for a neutral grid, a stop-loss can
+        additionally set an **upper** threshold above the grid range using
+        `stop_high_price` (and `limit_high_price` when `stop_type=price_limit`). These two
+        fields apply only to a `stop_loss` item on a neutral grid and only when
+        `stop_type` is `price` or `price_limit`; they are ignored otherwise.
+
+        **`*_sell_model`** — settlement currency for the position closed by the trigger.
+        Optional; when empty the order's default is used:
+
+        | Value | Meaning |
+        |---|---|
+        | `TO_QUOTE` | Settle to the quote currency |
+        | `TO_USDT` | Settle to USDT |
+
+        Use `loss_stop_sell_model` on a `stop_loss` item and `profit_stop_sell_model` on a
+        `stop_profit` item.
+
+        **Asynchronous write**: a successful response only means the request was accepted
+        and forwarded. The take-profit / stop-loss is persisted onto the order record
+        asynchronously — poll `GET /futuresGrid/order` and read `lossStop` / `profitStop`
+        (and related fields) to confirm the update took effect.
+
+        **Restrictions** (return `result=false` with the message shown):
+
+        | Message | Cause |
+        |---|---|
+        | `trigger price list nil` | `list` is empty |
+        | `invalid type: {v}, must be one of stop_loss/stop_profit` | `type` not in the allow-list |
+        | `invalid stop_type: {v}, must be one of price/price_limit/profit_amount/profit_ratio` | `stop_type` missing or not in the allow-list |
+        | `invalid amount: {v}` | `value` / `limit_price` / `limit_high_price` is not a valid decimal |
+        | `invalid loss_stop_sell_model: {v}` | `loss_stop_sell_model` not `TO_QUOTE` / `TO_USDT` |
+        | `invalid profit_stop_sell_model: {v}` | `profit_stop_sell_model` not `TO_QUOTE` / `TO_USDT` |
+        | `order is disable change tp` | The order forbids changing take-profit / stop-loss |
+        | `forbidden by invalid status:{s}, order_id:{id}` | Order is closing/unlocking/canceled |
+        | `forbidden for future_grid_bonus order` | Bonus-funded orders cannot set a stop-loss |
+
+        **Examples** — request bodies for common combinations:
+
+        Set a stop-loss at a fixed price:
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_loss", "stop_type": "price", "value": "70000" }
+          ]
+        }
+        ```
+
+        Set a take-profit at a fixed price:
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_profit", "stop_type": "price", "value": "150000" }
+          ]
+        }
+        ```
+
+        Set both take-profit and stop-loss in one call:
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_loss",   "stop_type": "price", "value": "70000" },
+            { "type": "stop_profit", "stop_type": "price", "value": "150000" }
+          ]
+        }
+        ```
+
+        Stop-loss by loss ratio (−20%) and take-profit by profit ratio (+50%):
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_loss",   "stop_type": "profit_ratio", "value": "-0.2" },
+            { "type": "stop_profit", "stop_type": "profit_ratio", "value": "0.5" }
+          ]
+        }
+        ```
+
+        Take-profit by profit amount, settled to USDT:
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_profit", "stop_type": "profit_amount", "value": "500", "profit_stop_sell_model": "TO_USDT" }
+          ]
+        }
+        ```
+
+        Take-profit as a limit order (place a limit at 149000 when 150000 is hit),
+        with a 30s trigger delay:
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_profit", "stop_type": "price_limit", "value": "150000", "limit_price": "149000", "stop_delay": 30 }
+          ]
+        }
+        ```
+
+        Neutral grid (`no_trend`) — lower and upper stop-loss prices:
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_loss", "stop_type": "price", "value": "70000", "stop_high_price": "160000" }
+          ]
+        }
+        ```
+
+        Clear a previously set stop-loss (empty `value`):
+        ```json
+        {
+          "bu_order_id": "1234567890",
+          "list": [
+            { "type": "stop_loss", "stop_type": "price", "value": "" }
+          ]
+        }
+        ```
+      operationId: updateTriggerProfitLossFuturesGrid
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuturesGridUpdateTriggerProfitLossRequest'
+      responses:
+        '200':
+          description: Trigger update accepted (persisted asynchronously).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FuturesGridTriggerProfitLossResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2899,6 +3093,90 @@ components:
         message:
           type: string
           description: RPC return message
+
+    FuturesGridTriggerProfitLossItem:
+      type: object
+      required: [type, stop_type, value]
+      description: |
+        A single take-profit or stop-loss setting. Field names are snake_case.
+        How `value` / `limit_price` are interpreted depends on `stop_type`.
+      properties:
+        type:
+          type: string
+          description: "Which trigger this item configures"
+          enum: [stop_loss, stop_profit]
+        stop_type:
+          type: string
+          description: |
+            How `value` is interpreted. Required (no implicit fallback):
+            `price` (trigger price), `price_limit` (trigger price, closes via a limit
+            order at `limit_price`), `profit_amount` (profit/loss amount),
+            `profit_ratio` (profit/loss ratio).
+          enum: [price, price_limit, profit_amount, profit_ratio]
+        value:
+          type: string
+          description: |
+            Trigger threshold, interpreted per `stop_type`. Empty string `""` clears the
+            trigger. When non-empty it only needs to be a valid decimal — not enforced to
+            be positive; `0` and negative values are accepted (e.g. `-0.2` = a −20%
+            stop-loss ratio).
+        limit_price:
+          type: string
+          description: Limit price used to close the position when `stop_type=price_limit`. Required in that case.
+        stop_delay:
+          type: integer
+          format: int64
+          description: Seconds to wait after the condition is first met before executing. `0` = immediate.
+        loss_stop_sell_model:
+          type: string
+          description: "Settlement currency for a stop-loss close. Optional; empty = order default."
+          enum: [TO_QUOTE, TO_USDT]
+        profit_stop_sell_model:
+          type: string
+          description: "Settlement currency for a take-profit close. Optional; empty = order default."
+          enum: [TO_QUOTE, TO_USDT]
+        stop_high_price:
+          type: string
+          description: |
+            Upper stop-loss price for a neutral grid (`no_trend`). Applies only to a
+            `stop_loss` item and only when `stop_type` is `price` or `price_limit`;
+            ignored otherwise.
+        limit_high_price:
+          type: string
+          description: Upper limit stop-loss price for a neutral grid, used together with `stop_high_price` when `stop_type=price_limit`.
+
+    FuturesGridUpdateTriggerProfitLossRequest:
+      type: object
+      required: [bu_order_id, list]
+      description: |
+        Set / update / clear the take-profit and stop-loss of a running futures grid order.
+        Field names are snake_case (unlike the other futuresGrid endpoints).
+      properties:
+        bu_order_id:
+          type: string
+          description: Bot order ID
+        list:
+          type: array
+          description: One item per trigger to configure. May include a `stop_loss` item, a `stop_profit` item, or both.
+          items:
+            $ref: '#/components/schemas/FuturesGridTriggerProfitLossItem'
+
+    FuturesGridTriggerProfitLossResponse:
+      type: object
+      description: Echo of the applied trigger settings. Persistence onto the order is asynchronous — poll `GET /futuresGrid/order` to confirm.
+      properties:
+        bu_order_id:
+          type: string
+          description: Bot order ID
+        result:
+          type: integer
+          format: int32
+          description: RPC return code
+        list:
+          type: array
+          description: Echo of the trigger settings that were applied.
+          items:
+            $ref: '#/components/schemas/FuturesGridTriggerProfitLossItem'
 
     # =========================================================================
     # Spot Grid schemas
