@@ -1195,60 +1195,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/v2/institution/wire/payout/account/update:
-    post:
-      tags: [Payout Account]
-      summary: Update a payout account
-      description: |
-        Partial update; only fields returned in `editableFields` may be changed.
-        Requires the `userId`'s platform KYB to be `APPROVED`.
-      operationId: institutionPayoutAccountUpdate
-      parameters:
-        - $ref: '#/components/parameters/Timestamp'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [userId, accountId, channel]
-              properties:
-                userId:
-                  type: string
-                accountId:
-                  type: string
-                channel:
-                  type: string
-                routingNumber:
-                  type: string
-                accountType:
-                  type: string
-                  enum: [CHECKING, SAVINGS]
-                accountHolderAddress:
-                  type: string
-                channelExtra:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/KeyValue'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/BaseResponse'
-                  - type: object
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/PayoutAccount'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '500':
-          $ref: '#/components/responses/InternalError'
-
   /api/v2/institution/wire/payout/account/delete:
     post:
       tags: [Payout Account]
@@ -1256,6 +1202,8 @@ paths:
       description: |
         Delete a payout (payee) account. Requires the `userId`'s platform KYB to
         be `APPROVED`.
+
+        > **`channel` currently supports only `straitsx`.**
       operationId: institutionPayoutAccountDelete
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1273,6 +1221,8 @@ paths:
                   type: string
                 channel:
                   type: string
+                  description: Channel. Currently only `straitsx` is supported.
+                  example: straitsx
       responses:
         '200':
           description: Successful response
