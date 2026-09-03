@@ -1,0 +1,2839 @@
+openapi: 3.0.3
+info:
+  title: Pionex Institution Open API (v2)
+  description: |
+    Pionex cryptocurrency exchange Institution RESTful API (v2) - HTTP API for
+    institutional service providers (`/api/v2/institution/*`). An institution uses
+    **its own API Key (an RSA or Ed25519 key pair)** to onboard and operate the
+    sub-accounts (`userId`) bound to it: fiat deposit/withdrawal, stablecoin
+    conversion, on-chain assets, and trading-account balances.
+
+    > This is the **v2** institution reference. It uses **public-key signature
+    > authentication** (RSA or Ed25519) and identifies the target sub-account by
+    > **`userId`** (a UUID). Authentication is documented in full below.
+
+    # General Info
+
+    ## Basic Info
+
+    > **Note:** The Institution API is currently Internal and only available to
+    > onboarded institutional providers. There is currently no self-service
+    > application channel available.
+
+    **Base URL:** `https://api.pionex.com`
+
+    **Protocol:** HTTPS
+
+    **Data Format:** JSON
+
+    **Field Naming:** camelCase (e.g. `userId`, `clientOrderId`).
+
+    **Amounts:** decimal strings (e.g. `"100.50"`) - never float, never
+    minor-unit integers.
+
+    **Timestamps:** millisecond Unix timestamp (`int64`) in **response bodies**;
+    the signature `timestamp` query parameter is in **seconds** (see
+    Authentication).
+
+    **Currency codes:** ISO 4217 uppercase (`"USD"`); country codes ISO 3166-1
+    alpha-2 uppercase (`"US"`).
+
+    ## Response Envelope
+
+    All endpoints return a uniform envelope.
+
+    Success:
+    ```json
+    { "result": true, "timestamp": 1785706000000, "data": { } }
+    ```
+
+    Failure:
+    ```json
+    { "result": false, "timestamp": 1785706000000, "code": "P_PAY_OPEN_API_INVALID_ARGUMENT", "message": "..." }
+    ```
+
+    Business failures are returned as HTTP `200` with `result: false`. The only
+    two exceptions come from the authentication layer: `401` (authentication
+    failed) and `400` (request body could not be read).
+
+    ## The `userId` Parameter
+
+    Except for public/self endpoints (create user, list users,
+    `asset/currencies`), **every endpoint requires `userId`** - the UUID of the
+    target sub-account:
+
+    - **GET requests:** pass `userId` in the query string (it participates in the
+      signature).
+    - **POST requests with a JSON body:** pass `userId` in the JSON request body.
+    - **File upload** (`multipart/form-data`): pass `userId` in the query string.
+
+    Obtain `userId` values from *List Sub-Accounts* (or the response of *Create
+    Sub-Account*).
+
+    # Authentication
+
+    Every request (except where noted) is authenticated with your institution API
+    Key and a **signature**. Apply for an API Key by registering your **public
+    key** with Pionex; you keep the private key.
+
+    ## Headers
+
+    | Header | Description |
+    |--------|-------------|
+    | `X-APIKEY` | Your API Key, in the form `webot_xxxxxxxx`. Used to look up your registered public key. |
+    | `X-Signature` | Base64 (standard encoding) of the signature over the canonical string below. |
+
+    ## Signature algorithms
+
+    The algorithm is determined by the **type of public key you registered** - you
+    do not choose it per request. Two key types are supported:
+
+    | Key type | How to sign | Notes |
+    |----------|-------------|-------|
+    | **RSA** | RSA-PSS over the **SHA-256** digest | 2048-4096-bit key. Salt length 32 recommended (20 / 32 / 64 all accepted). **Not** PKCS#1 v1.5. |
+    | **Ed25519** | Sign the message bytes **directly** | Do **not** pre-hash - EdDSA already includes SHA-512. |
+
+    - Register the public key in **PKIX/SPKI** form (`-----BEGIN PUBLIC KEY-----`).
+      PKCS#1 "RSA PUBLIC KEY" and other algorithms (ECDSA, DSA, ...) are not accepted.
+    - RSA reference: Go `rsa.SignPSS(rand, priv, crypto.SHA256, sha256(msg), nil)`;
+      OpenSSL `-sigopt rsa_padding_mode:pss`.
+
+    ## Required query parameter
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `timestamp` | integer | Current time in **seconds** (Unix). Required on every signed request and participates in the signature. Must be within **+/-5 seconds** of server time, otherwise the request is rejected. |
+
+    `timestamp` goes in the **query string** on every request, including `POST`
+    (whose business payload is in the JSON body). There is **no** `client_id` /
+    nonce parameter.
+
+    ## Canonical string
+
+    Sign the following string:
+    ```
+    {sub_path}:{sorted_query_string}:{request_body}:{timestamp}
+    ```
+
+    | Segment | Construction |
+    |---------|--------------|
+    | `sub_path` | The request path, verbatim (not URL-encoded), e.g. `/api/v2/institution/account/balances`. |
+    | `sorted_query_string` | Percent-encode each key and value **separately** with `encodeURIComponent` semantics - do **not** escape `A-Za-z0-9 - _ . ! ~ * ' ( )`, hex digits uppercase, space is `%20` (do not use form-encoding, which emits `+`). Join each as `key=value`, then **sort the `key=value` strings** and join with `&`. Every query parameter participates - `timestamp` plus business params such as `userId`; repeated keys are kept and sorted by value. |
+    | `request_body` | For `POST` with a JSON body: the raw body, verbatim (not re-serialized). For `GET`: the empty string (so the canonical string shows `::`). |
+    | `timestamp` | The same seconds value, appended again at the end. |
+
+    Examples:
+    ```
+    GET  (no body):   /api/v2/institution/account/balances:timestamp=1785706000&userId=88001234::1785706000
+    POST (JSON body): /api/v2/institution/kyb/create:timestamp=1785706000:{"userId":"88001234"}:1785706000
+    ```
+
+    Then `X-Signature = base64( sign( canonical_string ) )`, sent together with
+    `X-APIKEY`.
+
+    ## Permissions (Scopes)
+
+    Each API Key is granted one or more **scopes** at registration (default:
+    `read`). Every endpoint requires a scope; a request whose key lacks the
+    required scope is rejected with `P_PAY_OPEN_API_PERMISSION_DENIED` and never
+    reaches business logic.
+
+    - **read** - the `GET` queries (balances, orders, records, requirements,
+      status, lists) require read access.
+    - **write** - the `POST` create / submit / update / delete endpoints
+      (sub-account and KYB onboarding, payouts, on-chain withdrawals, conversions,
+      address-book and file writes) require the corresponding write scope.
+
+    Contact Pionex to grant your key the scopes your integration needs; the scopes
+    attached to a key cannot be changed by the caller.
+
+    ## Base Error Codes
+
+    Codes below may be returned by any endpoint. Endpoint-specific business codes
+    are listed with the relevant endpoint.
+
+    | Error Code | Description |
+    |------------|-------------|
+    | `P_PAY_OPEN_API_INVALID_ARGUMENT` | A request parameter is missing or invalid. |
+    | `P_PAY_OPEN_API_UNAUTHENTICATED` | Authentication failed (missing key, bad signature, etc.). Returns HTTP `401`. |
+    | `P_PAY_OPEN_API_PERMISSION_DENIED` | Your API Key lacks permission for this endpoint. |
+    | `P_PAY_OPEN_API_NOT_FOUND` | Resource does not exist, or does not belong to this user. |
+    | `P_PAY_OPEN_API_ALREADY_EXISTS` | Resource already exists (e.g. address already in the address book). |
+    | `P_PAY_OPEN_API_SERVICE_UNAVAILABLE` | A dependency is temporarily unavailable; retry later. |
+    | `P_PAY_OPEN_API_TIMEOUT` | The request timed out; retry later. |
+    | `P_PAY_OPEN_API_INTERNAL_ERROR` | Internal error. |
+    | `P_PAY_OPEN_API_OPERATION_NOT_SUPPORTED` | The channel does not support this operation. Do not retry. |
+    | `P_PAY_OPEN_API_CHANNEL_NOT_SUPPORTED_IN_REGION` | The requested `channel` is not available for your integration. Do not retry with the same channel. |
+
+  version: 2.0.0
+  contact:
+    name: Pionex API Support
+    url: https://t.me/pionexapi
+
+servers:
+  - url: https://api.pionex.com
+    description: Production
+
+security:
+  - ApiKey: []
+    Signature: []
+
+tags:
+  - name: User
+    description: Sub-account (user) creation and listing.
+  - name: KYB
+    description: Platform KYB submission and status; channel deposit-account onboarding (channel KYB).
+  - name: Deposit
+    description: Fiat deposit accounts and deposit orders (requires platform KYB APPROVED).
+  - name: Payout Account
+    description: Fiat payout (payee) account requirements, creation, update, and deletion (requires platform KYB APPROVED).
+  - name: Payout
+    description: Fiat withdrawal (payout) orders (requires platform KYB APPROVED).
+  - name: Asset
+    description: On-chain currencies, withdrawals, and deposit/withdrawal history.
+  - name: Address Book
+    description: On-chain withdrawal address-book management.
+  - name: Account
+    description: Trading-account balances.
+  - name: Convert
+    description: Stablecoin / asset conversion.
+  - name: File
+    description: File upload and download for KYB and supporting documents.
+
+paths:
+  # -------------------------------------------------------------------------
+  # User
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/user/create:
+    post:
+      tags: [User]
+      summary: Create a sub-account (user)
+      description: |
+        Create a sub-account (user) bound to your institution. Idempotent by
+        `clientId`.
+
+        This is a public/self endpoint (no `userId` in the payload) but still
+        requires a valid signature and the `write` scope.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_SUB_USER_CREATE_FORBIDDEN` | Master account unavailable, caller is itself a sub-account (nesting unsupported), or sub-account limit reached. |
+        | `P_PAY_OPEN_API_SUB_USER_ACCOUNT_CREATE_FAILED` | The sub-account was created but not fully set up. `data.userId` returns the created id; resend the identical request to complete setup. |
+      operationId: institutionUserCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, email, entityType]
+              properties:
+                clientId:
+                  type: string
+                  description: Client-defined idempotency key, max 64 chars. Retries must reuse the same value.
+                  maxLength: 64
+                email:
+                  type: string
+                  description: Email, max 64 chars.
+                  maxLength: 64
+                entityType:
+                  type: string
+                  description: "`CORPORATE` (business) / `INDIVIDUAL` (natural person)."
+                  enum: [CORPORATE, INDIVIDUAL]
+                remark:
+                  type: string
+                  description: Note, max 100 chars.
+                  maxLength: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          userId:
+                            type: string
+                            description: The created sub-account UUID.
+                            example: "88001234-1a2b-..."
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/users:
+    get:
+      tags: [User]
+      summary: List sub-accounts
+      description: |
+        List the sub-accounts bound to your institution.
+
+        This is a public/self endpoint (no `userId` parameter) but still requires
+        a valid signature and the `read` scope.
+
+        `total` is the total count for pagination. An out-of-range page returns an
+        empty `list` with the real `total`.
+      operationId: institutionUsersList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: page
+          in: query
+          required: false
+          description: Page number, starting from 1.
+          schema:
+            type: integer
+        - name: size
+          in: query
+          required: false
+          description: Page size, default 100, max 500.
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/SubAccount'
+                          total:
+                            type: integer
+                            description: Total count for pagination.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # KYB
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/kyb/create:
+    post:
+      tags: [KYB]
+      summary: Submit platform KYB
+      description: |
+        Submit company/representative information for a sub-account's **platform
+        KYB**. A `userId` has a single platform KYB application; resubmitting
+        updates it while it is still under review. Once `APPROVED`, it can no
+        longer be resubmitted.
+
+        Validation (key validity + unconditional required + enum) passing returns
+        `SUBMITTED`; otherwise `P_PAY_OPEN_API_INVALID_ARGUMENT` and nothing is
+        stored.
+
+        Platform KYB must reach status `APPROVED` before any channel deposit
+        onboarding; all `wire/*` endpoints require the `userId`'s platform KYB to
+        be `APPROVED` (otherwise `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED`).
+
+        ## Submission structure
+
+        ```json
+        {
+          "userId": "88001234-....",
+          "subject": { "fields": [ { "key": "subject.legalNameEn", "value": "Acme Ltd." } ] },
+          "representatives": [ { "representativeRef": "PERSON-01", "fields": [ { "key": "representative.firstName", "value": "..." } ] } ],
+          "documents": [ { "purpose": "subject.sourceOfFundsProof", "fileId": "...", "scope": "SUBJECT" },
+                         { "purpose": "representative.passport", "fileId": "...", "scope": "REPRESENTATIVE", "representativeRef": "PERSON-01" } ]
+        }
+        ```
+
+        - Subject (company) fields use the `subject.` prefix; each is one
+          `{ "key": "...", "value": "..." }` under `subject.fields`.
+        - Each related natural person uses the `representative.` prefix; submit one
+          entry per person under `representatives[]`, distinguished by the
+          `representativeRef` property (a stable per-person id, **not** a
+          `fields[]` key). Keep it unchanged across supplements.
+          `subject.signerPersonRefId` references this value.
+        - Documents share the same key space (their key is the document's purpose)
+          and carry a `fileId` - upload first (see File endpoints), then reference
+          by `fileId`. Any `fileId` you reference must belong to this `userId`.
+
+        # Platform KYB Field Reference
+
+        The canonical fields and documents accepted by `POST /kyb/create`. Applies
+        to companies registered in **Hong Kong (HK)** or the **United States
+        (US)**.
+
+        ## Required markers
+
+        | Marker | Meaning |
+        |--------|---------|
+        | **M** | Mandatory - a missing value fails validation (`P_PAY_OPEN_API_INVALID_ARGUMENT`). |
+        | **C** | Conditional - required when the trigger in the description holds. |
+        | **O** | Optional - providing it speeds up review; omitting it does not block. |
+
+        The `HK` / `US` columns give the marker per jurisdiction
+        (`subject.country`). `N/A` means the field is ignored for that
+        jurisdiction. Files are submitted as `documents[]` with the document's
+        canonical key as `purpose` and a `fileId`.
+
+        ## 1. Subject fields (`subject.*`)
+
+        | Key | HK | US | Rules |
+        |-----|:--:|:--:|-------|
+        | `subject.country` | M | M | Registration jurisdiction. `HK` / `US`. Drives all validation. |
+        | `subject.legalNameEn` | M | M | Legal English name, <=200. Must match the registration document exactly (incl. `Limited`/`Ltd.`/`Inc.` suffix). Non-Latin names need an official English translation. |
+        | `subject.legalNameCn` | O | N/A | Legal Chinese name, <=100. HK companies registered in Chinese should provide it; N/A for US. |
+        | `subject.registrationNo` | M | M | HK: Business Registration No.; US: IRS EIN (format `XX-XXXXXXX`). <=32. |
+        | `subject.registrationNoType` | M | M | `BRN` (HK) / `EIN` (US). Must match `subject.country`. |
+        | `subject.businessType` | M | M | Org form (enum below). Also determines which US charter document is required. |
+        | `subject.incorporationDate` | M | M | `yyyy-MM-dd`. Companies incorporated < 6 months may enter enhanced due diligence. |
+        | `subject.incorporationState` | N/A | M | US state code (e.g. `DE`, `CA`). US only. |
+        | `subject.email` | M | M | Official business email, <=128. A free-email domain (gmail/qq/163...) triggers manual review. |
+        | `subject.phone.countryCode` | C | C | Intl. dialing code without `+` (e.g. `852`, `1`). Required if phone is provided. |
+        | `subject.phone.number` | C | C | Required if phone is provided. <=20. |
+        | `subject.website` | O | O | Must include scheme (`https://`), <=256. Recommended for e-commerce/platform businesses. |
+        | `subject.notifyUrl` | O | O | Review-result callback URL. |
+        | `subject.registeredAddress.addressLine1` | M | M | Street + number, <=200. **No P.O. Box**; US must include a street number. |
+        | `subject.registeredAddress.addressLine2` | O | O | Room/floor/unit, <=200. |
+        | `subject.registeredAddress.city` | M | M | <=100. |
+        | `subject.registeredAddress.state` | O | M | 2-letter state code (e.g. `NY`). US mandatory; HK may omit. |
+        | `subject.registeredAddress.postalCode` | O | M | US mandatory; HK has no postal codes. |
+        | `subject.registeredAddress.countryCode` | M | M | ISO 3166-1 alpha-2. |
+        | `subject.operatingAddressSameAsRegistered` | M | M | `true` / `false`. When `true`, omit `operatingAddress`. |
+        | `subject.operatingAddress.*` | C | C | Same sub-fields as `registeredAddress`. Required when `operatingAddressSameAsRegistered = false`. |
+        | `subject.businessDescription` | M | M | Concrete description of products/services, <=500. Vague terms ("trading", "consulting") are rejected for supplement. |
+        | `subject.accountPurpose.cryptoTrading` | O | O | `true`/`false`. At least one `accountPurpose.*` should be `true`. |
+        | `subject.accountPurpose.fiatDeposit` | O | O | `true`/`false`. |
+        | `subject.accountPurpose.fiatWithdrawal` | O | O | `true`/`false`. |
+        | `subject.accountPurpose.cardIssuing` | O | O | `true`/`false`. |
+        | `subject.accountPurpose.crossBorderPayment` | O | O | `true`/`false`. |
+        | `subject.accountPurpose.fxConversion` | O | O | `true`/`false`. |
+        | `subject.accountPurpose.payroll` | O | O | `true`/`false`. |
+        | `subject.accountPurpose.other` | O | O | `true`/`false`; describe in `businessDescription`. |
+        | `subject.monthlyDepositLimit.amount` | M | M | Decimal string, <=2 decimals. Recommended in USD. |
+        | `subject.monthlyDepositLimit.currency` | M | M | ISO 4217. |
+        | `subject.monthlyWithdrawalLimit.amount` | M | M | Decimal string, <=2 decimals. |
+        | `subject.monthlyWithdrawalLimit.currency` | M | M | ISO 4217. |
+        | `subject.pepDeclaration.hasPepRelation` | M | M | `true`/`false`. Whether any director/shareholder/UBO (or close relation) is/was a politically exposed person. |
+        | `subject.pepDeclaration.description` | C | C | Required when `hasPepRelation = true`, <=500. Names, positions, tenure. |
+        | `subject.ownershipDeclaration.hasShareholderOver25Percent` | C | C | `true`/`false`. Required when no document evidencing the ownership structure is submitted. When `true`, `representatives[]` must include at least one person with `role.responsibility = ULTIMATE_BENEFICIAL_OWNER`. |
+        | `subject.ownershipDeclaration.hasNomineeShareholder` | O | O | `true`/`false`. If `true`, disclose the ultimate beneficial owner. |
+        | `subject.highRiskCountryExposure.involved` | O | O | `true`/`false`. Whether business touches FATF high-risk jurisdictions. |
+        | `subject.highRiskCountryExposure.description` | C | C | Required when `involved = true`, <=500. |
+        | `subject.termsAgreed` | M | M | Must be `true`, else the application is rejected. |
+        | `subject.dataUsageAgreed` | M | M | Must be `true` (authorizes third-party data verification). |
+        | `subject.serviceAgreementType` | M | M | `FULL` / `RECIPIENT` (enum below). |
+        | `subject.signerPersonRefId` | M | M | Must equal the `representativeRef` of the person designated as the authorized signer. |
+        | `subject.agreedAt` | M | M | ISO 8601 (e.g. `2026-08-25T10:12:33Z`). |
+        | `subject.deviceData.ipAddress` | M | M | Signer's public IP at consent time (IPv6-compatible), <=45. |
+        | `subject.deviceData.userAgent` | M | M | Signer's User-Agent, <=512. |
+
+        ## 2. Subject documents (`subject.*`)
+
+        Value is a `fileId`. Required matrix by jurisdiction:
+
+        | Key | HK | US | Notes |
+        |-----|:--:|:--:|-------|
+        | `subject.businessRegistrationCertificate` | M | N/A | Business Registration Certificate (BR). |
+        | `subject.businessFormation` | M | M | Certificate of Incorporation (HK CI / US Certificate of Incorporation, issued by the Secretary of State). |
+        | `subject.incorporationFormNnc1` | C | N/A | Incorporation Form NNC1. Note 1. |
+        | `subject.annualReturnNar1` | C | N/A | Annual Return NAR1. Note 1. |
+        | `subject.einConfirmationLetter` | N/A | M | IRS EIN confirmation letter (CP575 / 147C). |
+        | `subject.bylaws` | N/A | C | Charter - when `businessType` is a corporation subtype (`B_CORPORATION` / `C_CORPORATION` / `CLOSE_CORPORATION` / `S_CORPORATION`). Note 4. |
+        | `subject.operatingAgreement` | N/A | C | Charter - when `businessType = LLC`, or the merged fallback when `businessType` is not provided. Note 4. |
+        | `subject.partnershipAgreement` | N/A | C | Charter - when `businessType = LLP` / `LP` / `GENERAL_PARTNERSHIP`. Note 4. |
+        | `subject.registerOfDirectors` | C | C | Register of directors. Note 2. |
+        | `subject.ownershipProof` | C | C | Register of shareholders. Note 2. |
+        | `subject.shareholdingStructureChart` | C | C | Shareholding structure chart. Note 2, Note 3. |
+        | `subject.certificateOfGoodStanding` | N/A | O | Certificate of good standing. |
+        | `subject.financialStatements` | O | O | Financial statements. |
+        | `subject.authorizationLetter` | O | O | Authorization letter. |
+        | `subject.sourceOfFundsProof` | M | M | Source-of-funds proof - see Note 5. |
+        | `subject.supportiveOther` | O | O | Other supporting materials. |
+        | `subject.bankStatement` | O | O | Address proof: bank statement. |
+        | `subject.utilityBill` | O | O | Address proof: utility bill. |
+        | `subject.leaseAgreement` | O | O | Address proof: lease agreement. |
+        | `subject.taxNotice` | O | O | Address proof: tax authority notice. |
+        | `subject.addressProofOther` | O | O | Address proof: other. |
+
+        **Conditional rules:**
+
+        - **Note 1 (HK charter docs):** submit at least one of
+          `incorporationFormNnc1` / `annualReturnNar1`. If incorporated over a
+          year, `annualReturnNar1` (latest directors/shareholders/address) is
+          preferred.
+        - **Note 2 (ownership & directors):** submit at least one of
+          `registerOfDirectors` / `ownershipProof` / `shareholdingStructureChart`
+          that fully shows directors and ownership. If already evidenced by
+          NNC1/NAR1 (HK) or the charter document (US), it may be omitted, and
+          `subject.ownershipDeclaration.*` may then also be omitted.
+        - **Note 3:** if none of the above shows the full ownership chain (e.g.
+          multi-tier holding), `shareholdingStructureChart` will be requested via
+          supplement.
+        - **Note 4 (US charter):** submit the charter document matching
+          `businessType` - corporation subtypes (`B_CORPORATION` /
+          `C_CORPORATION` / `CLOSE_CORPORATION` / `S_CORPORATION`) -> `bylaws`;
+          `LLC` -> `operatingAgreement`; `LLP` / `LP` / `GENERAL_PARTNERSHIP` ->
+          `partnershipAgreement`. Only one, matching the true org form.
+          (`operatingAgreement` also serves as the fallback when the specific
+          charter type is unclear.)
+        - **Note 5 (source of funds):** mandatory. Acceptable forms include recent
+          6-month corporate bank statements, audited financials, key trade
+          contracts + invoices, capital-contribution proof, or investment
+          agreements + receipts. Multiple entries allowed (at least one). An
+          account-balance screenshot alone is insufficient - the funds' formation
+          chain must be shown.
+
+        **Address proof:** required when
+        `operatingAddressSameAsRegistered = false`, or when the submitted
+        registration documents do not state an address. Provide via the
+        `subject.bankStatement` / `utilityBill` / `leaseAgreement` / `taxNotice` /
+        `addressProofOther` keys; issued within the last 3 months.
+
+        ## 3. Representative fields (`representative.*`)
+
+        One set per person, distinguished by the `representativeRef` property. The
+        per-person id is the `representativeRef` property of each
+        `representatives[]` entry, **not** a `fields[]` key.
+
+        | Key | HK | US | Rules |
+        |-----|:--:|:--:|-------|
+        | `representativeRef` *(property - not a `fields[]` key)* | M | M | Stable per-person id in your system; keep unchanged across supplements. Supplied as the `representativeRef` property of each `representatives[]` entry - do **not** place it inside `fields`. `subject.signerPersonRefId` references this value. |
+        | `representative.role.responsibility` | O | O | The person's responsibility relative to the company - **single value** from the enum: `ULTIMATE_BENEFICIAL_OWNER` / `AUTHORIZED_REPRESENTATIVE` / `DIRECTOR`. |
+        | `representative.firstName` | M | M | English first name, <=100. Must match the ID exactly. |
+        | `representative.middleName` | O | O | English middle name, <=100. Provide if present on the ID. |
+        | `representative.lastName` | M | M | English last name, <=100. Must match the ID exactly. |
+        | `representative.fullNameCn` | O | N/A | Chinese name, <=50. HK: provide if the ID carries a Chinese name. |
+        | `representative.jobTitle` | M | M | Title (e.g. Director, CEO), <=100. |
+        | `representative.birthDate` | M | M | `yyyy-MM-dd`. Must match the ID; must be >= 18 years old. |
+        | `representative.nationality` | M | M | ISO 3166-1 alpha-2. |
+        | `representative.ownershipPercentage` | C | C | Required when `role.responsibility = ULTIMATE_BENEFICIAL_OWNER`. `0.01`-`100`, <=2 decimals; look-through actual percentage. |
+        | `representative.residentialAddress.addressLine1` | M | M | Actual residential address (not temporary), <=200. |
+        | `representative.residentialAddress.addressLine2` | O | O | <=200. |
+        | `representative.residentialAddress.city` | M | M | <=100. |
+        | `representative.residentialAddress.state` | O | M | US mandatory (2-letter state code). |
+        | `representative.residentialAddress.postalCode` | O | M | US mandatory. |
+        | `representative.residentialAddress.countryCode` | M | M | ISO 3166-1 alpha-2. |
+        | `representative.email` | M | M | Required for every person, <=128 (used for verification-code delivery). |
+        | `representative.phone.countryCode` | O | O | Recommended for the primary contact person. |
+        | `representative.phone.number` | O | O | Recommended for the primary contact person. |
+        | `representative.identityDocument.ssn` | N/A | M | US: personal tax id (SSN/ITIN) for every person; N/A for HK. |
+        | `representative.identityDocument.idType` | M | M | Enum below. |
+        | `representative.identityDocument.idNumber` | M | M | <=64. |
+        | `representative.identityDocument.issuingCountry` | M | M | ISO 3166-1 alpha-2. |
+        | `representative.identityDocument.issueDate` | O | O | `yyyy-MM-dd`. |
+        | `representative.identityDocument.expiryDate` | M | M | `yyyy-MM-dd`. Long-validity IDs use `9999-12-31`. An already-expired ID fails validation. |
+        | `representative.ownershipAttestedAt` | C | C | ISO 8601. Required when `subject.ownershipDeclaration.hasShareholderOver25Percent` has a value. |
+
+        ## 4. Representative documents (`representative.*`)
+
+        Value is a `fileId`. ID-document files are routed by
+        `identityDocument.idType` (see the Role/ID enum below).
+
+        | Key | Req | Notes |
+        |-----|:--:|-------|
+        | `representative.passport` | C | Passport photo page (front only) - when `idType = PASSPORT`. |
+        | `representative.idCardFront` / `representative.idCardBack` | C | Both required for card-style IDs - see the idType routing note below. |
+        | `representative.driversLicenseFront` / `representative.driversLicenseBack` | C | Both required when `idType = DRIVERS_LICENSE`. |
+        | `representative.taxIdDocument` | C | Tax-id proof (SSN / ITIN); provide together with `representative.identityDocument.ssn` for US persons. |
+        | `representative.proofOfAddress` | C | Required when the residential address differs from the ID's stated address. |
+        | `representative.photoHoldingId` | O | Requested by risk control when fraud is suspected. |
+        | `representative.liveSelfie` | O | As above. |
+        | `representative.appointmentDocument` | O | Appointment/authorization document. |
+        | `representative.nameChangeCertificate` | C | Required when the ID name differs from the declared name. |
+        | `representative.supportiveOther` | O | Other supporting materials. |
+
+        ## 5. Enums
+
+        Values below are the exact accepted values. The subset actually allowed for
+        a given channel/country is returned by the requirements flow - do not
+        assume every value is accepted everywhere.
+
+        - **`subject.country`**: `HK`, `US`.
+        - **`subject.registrationNoType`**: `BRN` (HK), `EIN` (US).
+        - **`subject.businessType`** (single list, not split by jurisdiction):
+          `B_CORPORATION`, `C_CORPORATION`, `CLOSE_CORPORATION`, `S_CORPORATION`,
+          `LLC`, `LLP`, `LP`, `GENERAL_PARTNERSHIP`, `SOLE_PROPRIETOR`, `TRUST`,
+          `COOPERATIVE`, `NONPROFIT_CORPORATION`, `OTHER`. `OTHER` requires an
+          accompanying description.
+        - **`subject.serviceAgreementType`**: `FULL` (direct service
+          relationship), `RECIPIENT` (payee only, no direct relationship).
+        - **`representative.role.responsibility`** (single value):
+          `ULTIMATE_BENEFICIAL_OWNER`, `AUTHORIZED_REPRESENTATIVE`, `DIRECTOR`.
+        - **`representative.identityDocument.idType`**: `PASSPORT`,
+          `DRIVERS_LICENSE`, `NATIONAL_ID`, `STATE_OR_PROVINCIAL_ID`,
+          `PERMANENT_RESIDENCY_ID`, `MATRICULATE_ID`, `MILITARY_ID`, `VISA`.
+
+        **ID-document files by `idType`:** `PASSPORT` -> `passport`;
+        `DRIVERS_LICENSE` -> `driversLicenseFront` + `driversLicenseBack`; all
+        other government IDs (`NATIONAL_ID`, `STATE_OR_PROVINCIAL_ID`,
+        `PERMANENT_RESIDENCY_ID`, `MATRICULATE_ID`, `MILITARY_ID`, `VISA`) ->
+        `idCardFront` + `idCardBack`.
+
+        **Address proof** (which `subject.*` document key to use): bank statement
+        -> `bankStatement`; utility bill -> `utilityBill`; lease ->
+        `leaseAgreement`; tax notice -> `taxNotice`; other -> `addressProofOther`.
+
+        ## 6. File limits
+
+        | Limit | Value |
+        |-------|-------|
+        | Max file count per submission | 30 |
+        | Max bytes per file | 12,582,912 (12 MB) |
+        | Max total bytes per submission | 104,857,600 (100 MB) |
+        | Allowed content types | `application/pdf`, `image/jpeg`, `image/png`, `image/heic` |
+
+        ## 7. Role integrity & cross-field rules
+
+        Submission is rejected with `P_PAY_OPEN_API_INVALID_ARGUMENT` when any of
+        the following fails:
+
+        - **Registration type matches jurisdiction:** `HK` => `registrationNoType = BRN`; `US` => `EIN`.
+        - **US state present:** `US` requires `subject.incorporationState`.
+        - **Operating address present** when `operatingAddressSameAsRegistered = false`.
+        - **Every representative has an `email`.**
+        - **Beneficial owner ownership:** when `subject.ownershipDeclaration.hasShareholderOver25Percent = true` (or an ownership document shows a >=25% holder), at least one representative must have `role.responsibility = ULTIMATE_BENEFICIAL_OWNER`. Each such person's `ownershipPercentage` must be in `(0, 100]`, and the sum must not exceed 100.
+        - **ID not expired**; ID **back** file present for card-style IDs and `DRIVERS_LICENSE`.
+        - **Age >= 18** (from `birthDate`).
+        - **US charter document matches `businessType`** (see Note 4).
+        - **US personal tax id present** (`representative.identityDocument.ssn`) for every representative.
+        - **Required company documents present** per the matrix; source-of-funds proof present; ownership information resolvable (either an ownership document or `subject.ownershipDeclaration.*`).
+        - **Consents accepted:** `termsAgreed` and `dataUsageAgreed` are `true`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_KYB_ALREADY_APPROVED` | Platform KYB is already `APPROVED` and can no longer be resubmitted. |
+        | `P_PAY_OPEN_API_KYB_SUBMIT_IN_PROGRESS` | A submission for this `userId` is already being processed; retry later. |
+      operationId: institutionKybCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KybCreateRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            description: KYB submission status.
+                            example: SUBMITTED
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/kyb:
+    get:
+      tags: [KYB]
+      summary: Get platform KYB status
+      description: |
+        Get the platform KYB status for a `userId`.
+      operationId: institutionKybGet
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/KybStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/deposit/account/requirements:
+    get:
+      tags: [KYB]
+      summary: Get channel onboarding requirements
+      description: |
+        Returns the items still required for channel deposit onboarding.
+        Information already provided is omitted. Representative requirements are
+        returned per contact.
+
+        Channel KYB fields are **dynamic** - call this endpoint first, then fill
+        per the returned `Requirement` items. Do not hard-code channel field lists.
+
+        - **`mode`** is the source of truth for whether to submit an item:
+          `REQUIRED` (must submit), `OPTIONAL`, or `CONDITIONAL`. `CONDITIONAL`
+          means the item becomes required only when other fields take certain
+          values; when unsure, submit it.
+        - **`kind`** is `FIELD` or `DOCUMENT`. Documents are referenced by
+          `fileId` (upload first); do not inline file bytes.
+        - Representatives are grouped by `representativeRef`.
+        - `regex` / `example` / `enumValues` on a field are for client-side
+          validation and hints.
+        - Documents must be submitted in full.
+
+        Do not pass `country` or `businessType` - the requirement set follows the
+        values from your platform KYB (`subject.country` / `subject.businessType`).
+
+        > **`channel` currently supports only `bridge`.**
+      operationId: institutionDepositAccountRequirements
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: true
+          description: Channel identifier. Currently only `bridge` is supported.
+          schema:
+            type: string
+            example: bridge
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ChannelRequirements'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/deposit/account/create:
+    post:
+      tags: [KYB]
+      summary: Onboard a deposit account (channel KYB)
+      description: |
+        Submit channel onboarding. Returns onboarding `status` only; missing/invalid
+        items are not itemized - call the requirements endpoint to learn what is
+        still missing.
+
+        Provide **all** required documents in full every time. Do not pass
+        `country` or `businessType` here - they come from your platform KYB. Any
+        `fileId` you reference must belong to this `userId`.
+
+        Requires the `userId`'s platform KYB to be `APPROVED`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED` | Platform KYB is not approved yet; it must be approved before channel onboarding. |
+        | `P_PAY_OPEN_API_KYB_ADDRESS_REJECTED` | Address rejected by the channel; `data.violations` names the rejected fields. |
+        | `P_PAY_OPEN_API_KYB_DOCUMENT_REJECTED` | A document was rejected or a required field is missing. |
+        | `P_PAY_OPEN_API_KYB_SUBJECT_TYPE_CONFLICT` | Another subject type already exists for this `userId`. |
+        | `P_PAY_OPEN_API_KYB_MANUAL_REVIEW_REQUIRED` | Additional review is required; do not resubmit with altered details. |
+        | `P_PAY_OPEN_API_KYB_SUBJECT_NOT_FOUND` | No matching company record was found. |
+      operationId: institutionDepositAccountCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  description: Sub-account UUID.
+                channel:
+                  type: string
+                  description: Channel. Currently only `bridge` is supported.
+                  example: bridge
+                signedAgreementId:
+                  type: string
+                  description: For `tosMode = HOSTED_LINK`.
+                acceptedTerms:
+                  type: boolean
+                  description: For `tosMode = INLINE_ACCEPT`.
+                termsVersion:
+                  type: string
+                  description: For `tosMode = INLINE_ACCEPT`.
+                subject:
+                  $ref: '#/components/schemas/KybFieldGroup'
+                representatives:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/KybRepresentative'
+                documents:
+                  type: array
+                  description: Provide all required documents in full every time.
+                  items:
+                    $ref: '#/components/schemas/KybDocument'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            description: "Onboarding status: `NOT_CREATED` / `SUBMITTED` / `IN_REVIEW` / `ACTION_REQUIRED` / `APPROVED` / `REJECTED`."
+                            enum: [NOT_CREATED, SUBMITTED, IN_REVIEW, ACTION_REQUIRED, APPROVED, REJECTED]
+                            example: IN_REVIEW
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/deposit/account:
+    get:
+      tags: [KYB]
+      summary: Get deposit-account onboarding status
+      description: |
+        Returns the channel onboarding `status`. `status = NOT_CREATED` means not
+        yet onboarded (not an error).
+      operationId: institutionDepositAccountStatus
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: true
+          description: Channel. Currently only `bridge` is supported.
+          schema:
+            type: string
+            example: bridge
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            enum: [NOT_CREATED, SUBMITTED, IN_REVIEW, ACTION_REQUIRED, APPROVED, REJECTED]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Deposit
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/wire/deposit/accounts:
+    get:
+      tags: [Deposit]
+      summary: List deposit accounts
+      description: |
+        List the fiat deposit accounts for a `userId`. Requires the `userId`'s
+        platform KYB to be `APPROVED` (otherwise
+        `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED`).
+      operationId: institutionDepositAccountsList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: true
+          description: Channel.
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          description: ISO 4217.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DepositAccount'
+                          total:
+                            type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/deposit/orders:
+    get:
+      tags: [Deposit]
+      summary: List deposit orders
+      description: |
+        List deposit orders for a `userId`. Requires the `userId`'s platform KYB to
+        be `APPROVED`.
+      operationId: institutionDepositOrdersList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: true
+          description: Channel.
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/StartTime'
+        - $ref: '#/components/parameters/EndTime'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/DepositOrder'
+                          total:
+                            type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/deposit/order:
+    get:
+      tags: [Deposit]
+      summary: Get a deposit order
+      description: |
+        Get a single deposit order. On a non-success status (e.g. `FAILED`), the
+        order also carries a `reason` object.
+      operationId: institutionDepositOrderGet
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: orderId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: channel
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DepositOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Payout Account
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/wire/payout/account/requirements:
+    get:
+      tags: [Payout Account]
+      summary: Get payout-account field requirements
+      description: |
+        Returns the required fields for a payout (payee) account, driven by
+        channel + country + currency + rail. Requires the `userId`'s platform KYB
+        to be `APPROVED`.
+
+        Each `FieldRequirement`: `{ key, label, required, regex, isExtra, kind }`.
+        `isExtra=true` -> put the value into `channelExtra`. `kind` is `FIELD`
+        (default) or `DOCUMENT`; a `DOCUMENT` field is supplied via
+        `spec.documents` (upload the file first, reference by `fileId`), not as a
+        plain value.
+      operationId: institutionPayoutAccountRequirements
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: country
+          in: query
+          required: false
+          description: ISO 3166-1 alpha-2.
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          description: ISO 4217.
+          schema:
+            type: string
+        - name: rail
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          channel:
+                            type: string
+                          requirements:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/FieldRequirement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/payout/account/create:
+    post:
+      tags: [Payout Account]
+      summary: Create a payout (payee) account
+      description: |
+        Create a payout (payee) account. Fields in `spec` are constrained by the
+        requirements endpoint. Requires the `userId`'s platform KYB to be
+        `APPROVED`. Wait for the account to reach `AVAILABLE` before submitting a
+        payout against it.
+      operationId: institutionPayoutAccountCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, clientAccountId, channel, spec]
+              properties:
+                userId:
+                  type: string
+                  description: Sub-account UUID.
+                clientAccountId:
+                  type: string
+                  description: Bind idempotency id, unique per `userId`, 1-64 chars. Retries must reuse the original value.
+                  minLength: 1
+                  maxLength: 64
+                channel:
+                  type: string
+                  description: Channel.
+                spec:
+                  $ref: '#/components/schemas/PayoutAccountSpec'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PayoutAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/payout/accounts:
+    get:
+      tags: [Payout Account]
+      summary: List payout accounts
+      description: |
+        List payout (payee) accounts for a `userId`. Requires the `userId`'s
+        platform KYB to be `APPROVED`. Use `accountId` in payout requests.
+      operationId: institutionPayoutAccountsList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PayoutAccount'
+                          total:
+                            type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/payout/account/update:
+    post:
+      tags: [Payout Account]
+      summary: Update a payout account
+      description: |
+        Partial update; only fields returned in `editableFields` may be changed.
+        Requires the `userId`'s platform KYB to be `APPROVED`.
+      operationId: institutionPayoutAccountUpdate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, accountId, channel]
+              properties:
+                userId:
+                  type: string
+                accountId:
+                  type: string
+                channel:
+                  type: string
+                routingNumber:
+                  type: string
+                accountType:
+                  type: string
+                  enum: [CHECKING, SAVINGS]
+                accountHolderAddress:
+                  type: string
+                channelExtra:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/KeyValue'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PayoutAccount'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/payout/account/delete:
+    post:
+      tags: [Payout Account]
+      summary: Delete a payout account
+      description: |
+        Delete a payout (payee) account. Requires the `userId`'s platform KYB to
+        be `APPROVED`.
+      operationId: institutionPayoutAccountDelete
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, accountId, channel]
+              properties:
+                userId:
+                  type: string
+                accountId:
+                  type: string
+                channel:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Empty object.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Payout
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/wire/payout/order/create:
+    post:
+      tags: [Payout]
+      summary: Create a payout (fiat withdrawal)
+      description: |
+        Create a payout (fiat withdrawal). Requires the `userId`'s platform KYB to
+        be `APPROVED`.
+
+        **Idempotency:** always send a unique `clientOrderId`; on timeout/no-response,
+        re-send with the **same** `clientOrderId` (or query first via List/Get
+        Payout Order) - never retry with a new key.
+      operationId: institutionPayoutOrderCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, clientOrderId]
+              properties:
+                userId:
+                  type: string
+                  description: Sub-account UUID.
+                clientOrderId:
+                  type: string
+                  description: Globally unique idempotency key. Retries must reuse the original value.
+                channel:
+                  type: string
+                payoutAccountId:
+                  type: string
+                  description: Target payout account (`accountId` from Create/List Payout Account).
+                sourceCurrency:
+                  type: string
+                  description: Debit asset code (e.g. `USDT`).
+                targetCurrency:
+                  type: string
+                  description: Credited asset code (e.g. `USD`).
+                amount:
+                  type: string
+                  description: Total debit amount, in `sourceCurrency`.
+                channelExtra:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/KeyValue'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          orderId:
+                            type: string
+                          status:
+                            type: string
+                          amount:
+                            type: string
+                          feeAmount:
+                            type: string
+                          finalAmount:
+                            type: string
+                          reason:
+                            $ref: '#/components/schemas/Reason'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/payout/orders:
+    get:
+      tags: [Payout]
+      summary: List payout orders
+      description: |
+        List payout orders for a `userId`. Requires the `userId`'s platform KYB to
+        be `APPROVED`.
+      operationId: institutionPayoutOrdersList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: channel
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/StartTime'
+        - $ref: '#/components/parameters/EndTime'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/PayoutOrder'
+                          total:
+                            type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/wire/payout/order:
+    get:
+      tags: [Payout]
+      summary: Get a payout order
+      description: |
+        Get a single payout order by `orderId` **or** `clientOrderId`. Requires the
+        `userId`'s platform KYB to be `APPROVED`.
+      operationId: institutionPayoutOrderGet
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: orderId
+          in: query
+          required: false
+          description: Provide `orderId` or `clientOrderId`.
+          schema:
+            type: string
+        - name: clientOrderId
+          in: query
+          required: false
+          description: Provide `orderId` or `clientOrderId`.
+          schema:
+            type: string
+        - name: channel
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PayoutOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Asset (On-Chain)
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/asset/currencies:
+    get:
+      tags: [Asset]
+      summary: List currencies and chains
+      description: |
+        List supported currencies and their chains. This is a public/self endpoint
+        and does not take `userId`, but still requires a valid signature and the
+        `read` scope.
+      operationId: institutionAssetCurrencies
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: currency
+          in: query
+          required: false
+          description: Filter by currency, max 60.
+          schema:
+            type: string
+            maxLength: 60
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          currencies:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Currency'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/asset/withdraw:
+    post:
+      tags: [Asset]
+      summary: Create an on-chain withdrawal
+      description: |
+        Create an on-chain withdrawal. The address whitelist must be enabled and
+        the address must be whitelisted (or in the address book, for sub-accounts).
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_ACCOUNT_FROZEN` | Deposits/withdrawals frozen for this account. |
+        | `P_PAY_OPEN_API_KYC_REQUIRED` | KYC not completed or insufficient level. |
+        | `P_PAY_OPEN_API_REGION_RESTRICTED` | The operation is restricted in your region. |
+        | `P_PAY_OPEN_API_SIGN_REJECTED` | Security signature check failed. |
+        | `P_PAY_OPEN_API_OPERATION_FORBIDDEN` | Blocked after high-risk behavior; `data` contains `restrict_expired_on`, `restrict_ttl`. |
+        | `P_PAY_OPEN_API_UNSUPPORTED_CURRENCY` | `currency` + `chain` combination unsupported. |
+        | `P_PAY_OPEN_API_WITHDRAW_WHITELIST_CLOSED` | Address whitelist not enabled (mandatory for Open API). |
+        | `P_PAY_OPEN_API_WITHDRAW_ADDRESS_NOT_WHITELISTED` | Address not on the whitelist. |
+        | `P_PAY_OPEN_API_WITHDRAW_ADDRESS_NOT_ALLOWED` | Address not on the configured allow list. |
+        | `P_PAY_OPEN_API_WITHDRAW_ADDRESS_NOT_IN_ADDRESS_BOOK` | Sub-account address not in the address book. |
+      operationId: institutionAssetWithdrawCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, clientId, currency, chain, address, amount]
+              properties:
+                userId:
+                  type: string
+                  description: Sub-account UUID.
+                clientId:
+                  type: string
+                  description: Idempotency key, globally unique, max 64. Retries must reuse the original value.
+                  maxLength: 64
+                currency:
+                  type: string
+                  description: e.g. `USDT`, max 60.
+                  maxLength: 60
+                chain:
+                  type: string
+                  description: A withdraw-enabled chain from List Currencies, max 60.
+                  maxLength: 60
+                address:
+                  type: string
+                  description: Destination address, max 300.
+                  maxLength: 300
+                tag:
+                  type: string
+                  description: Tag/Memo, required for currencies where `hasTag=true`, max 100.
+                  maxLength: 100
+                amount:
+                  type: string
+                  description: Amount, max 60.
+                  maxLength: 60
+                note:
+                  type: string
+                  description: Note, max 100.
+                  maxLength: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          id:
+                            type: string
+                            example: "123456789"
+                          clientId:
+                            type: string
+                            example: my-withdraw-001
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Asset]
+      summary: Query a single on-chain withdrawal
+      description: |
+        Query a single on-chain withdrawal by `id` or `clientId` (at least one
+        required).
+      operationId: institutionAssetWithdrawGet
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: id
+          in: query
+          required: false
+          description: Withdrawal id, max 64. Provide `id` or `clientId`.
+          schema:
+            type: string
+            maxLength: 64
+        - name: clientId
+          in: query
+          required: false
+          description: Client idempotency key, max 64. Provide `id` or `clientId`.
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AssetRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/asset/records:
+    get:
+      tags: [Asset]
+      summary: Query deposit/withdrawal history
+      description: |
+        Query on-chain deposit/withdrawal history for a `userId`.
+      operationId: institutionAssetRecords
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: type
+          in: query
+          required: false
+          description: "`DEPOSIT` / `WITHDRAW`."
+          schema:
+            type: string
+            enum: [DEPOSIT, WITHDRAW]
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/StartTime'
+        - $ref: '#/components/parameters/EndTime'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          records:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/AssetRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Address Book
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/addressBooks:
+    get:
+      tags: [Address Book]
+      summary: List address-book entries
+      description: |
+        List address-book entries for a `userId`. `currency` and `chain` are used
+        together.
+      operationId: institutionAddressBooksList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: currency
+          in: query
+          required: false
+          description: Use together with `chain`.
+          schema:
+            type: string
+        - name: chain
+          in: query
+          required: false
+          description: Use together with `currency`.
+          schema:
+            type: string
+        - name: onlyWhitelist
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/AddressBookEntry'
+                          total:
+                            type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/addressBook:
+    post:
+      tags: [Address Book]
+      summary: Add an address-book entry
+      description: |
+        Add an address-book entry for a `userId`.
+      operationId: institutionAddressBookAdd
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, currency, chain, address, label]
+              properties:
+                userId:
+                  type: string
+                currency:
+                  type: string
+                chain:
+                  type: string
+                address:
+                  type: string
+                label:
+                  type: string
+                memo:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AddressBookEntry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/addressBook/delete:
+    post:
+      tags: [Address Book]
+      summary: Delete an address-book entry
+      description: |
+        Delete an address-book entry for a `userId`.
+      operationId: institutionAddressBookDelete
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, addressId]
+              properties:
+                userId:
+                  type: string
+                addressId:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        description: Empty object.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Account
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/account/balances:
+    get:
+      tags: [Account]
+      summary: Get trading-account balances
+      description: |
+        Get trading-account balances for a `userId`. `list[]` items are
+        `{ coin, free, frozen }` (8-decimal decimal strings), sorted by coin
+        ascending.
+      operationId: institutionAccountBalances
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Balance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # Convert
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/convert/order/create:
+    post:
+      tags: [Convert]
+      summary: Create a conversion
+      description: |
+        Create a conversion order. `baseAmount` is required only when `side=SELL`;
+        `quoteAmount` is required only when `side=BUY`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_CONVERT_INVALID_AMOUNT` | `side=SELL` without `baseAmount`, or `side=BUY` without `quoteAmount`. |
+        | `P_PAY_OPEN_API_SYMBOL_MAINTENANCE` | Trading pair under maintenance. |
+        | `P_PAY_OPEN_API_SYMBOL_MARKET_CLOSE` | Trading pair closed (non-trading day). |
+      operationId: institutionConvertOrderCreate
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, baseCoin, quoteCoin, side]
+              properties:
+                userId:
+                  type: string
+                baseCoin:
+                  type: string
+                  description: Base currency.
+                quoteCoin:
+                  type: string
+                  description: Quote currency.
+                side:
+                  type: string
+                  enum: [BUY, SELL]
+                baseAmount:
+                  type: string
+                  description: Base amount - required only when `side=SELL`.
+                quoteAmount:
+                  type: string
+                  description: Quote amount - required only when `side=BUY`.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          orderId:
+                            type: string
+                            example: ord-1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/convert/orders:
+    get:
+      tags: [Convert]
+      summary: List conversion orders
+      description: |
+        List conversion orders for a `userId`.
+      operationId: institutionConvertOrdersList
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - $ref: '#/components/parameters/StartTime'
+        - $ref: '#/components/parameters/EndTime'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          list:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/ConvertRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/convert/order:
+    get:
+      tags: [Convert]
+      summary: Get a conversion order
+      description: |
+        Get a single conversion order.
+      operationId: institutionConvertOrderGet
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: orderId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ConvertRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # -------------------------------------------------------------------------
+  # File
+  # -------------------------------------------------------------------------
+
+  /api/v2/institution/file/upload:
+    post:
+      tags: [File]
+      summary: Upload a file (KYB / supporting documents)
+      description: |
+        Upload a file (KYB / supporting documents), referenced elsewhere by
+        `fileId`. `userId` is passed in the **query string** (the request body is
+        multipart, so `userId` cannot go in the body here).
+      operationId: institutionFileUpload
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          fileId:
+                            type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v2/institution/file/download:
+    get:
+      tags: [File]
+      summary: Download a file
+      description: |
+        Download a previously uploaded file by `fileId`. Returns a binary stream.
+      operationId: institutionFileDownload
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: fileId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Binary file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-APIKEY
+      description: |
+        Your institution API Key, in the form `webot_xxxxxxxx`. Used to look up
+        your registered public key. Must be accompanied by the `X-Signature`
+        header. See the Authentication section for the full signing algorithm
+        (RSA-PSS over SHA-256, or Ed25519) and the canonical-string construction.
+    Signature:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: |
+        Base64 (standard encoding) of the signature over the canonical string
+        `{sub_path}:{sorted_query_string}:{request_body}:{timestamp}`. The
+        algorithm (RSA-PSS/SHA-256 or Ed25519) is fixed by the type of the public
+        key you registered. See the Authentication section for details.
+
+  parameters:
+    Timestamp:
+      name: timestamp
+      in: query
+      required: true
+      description: |
+        Current time in **seconds** (Unix). Required on every signed request and
+        participates in the signature. Must be within +/-5 seconds of server time.
+      schema:
+        type: integer
+        format: int64
+      example: 1785706000
+    UserIdQueryRequired:
+      name: userId
+      in: query
+      required: true
+      description: Target sub-account UUID. Participates in the signature.
+      schema:
+        type: string
+      example: "88001234-1a2b-..."
+    Page:
+      name: page
+      in: query
+      required: false
+      description: Page number, starting from 1.
+      schema:
+        type: integer
+    Size:
+      name: size
+      in: query
+      required: false
+      description: Page size.
+      schema:
+        type: integer
+    StartTime:
+      name: startTime
+      in: query
+      required: false
+      description: Start time, millisecond Unix timestamp.
+      schema:
+        type: integer
+        format: int64
+    EndTime:
+      name: endTime
+      in: query
+      required: false
+      description: End time, millisecond Unix timestamp.
+      schema:
+        type: integer
+        format: int64
+
+  schemas:
+    BaseResponse:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Success indicator.
+        timestamp:
+          type: integer
+          format: int64
+          description: Response timestamp in milliseconds.
+        code:
+          type: string
+          description: Error code (present only on failure).
+        message:
+          type: string
+          description: Error message (present only on failure).
+
+    Reason:
+      type: object
+      description: Failure/return reason, present only when a channel returns one.
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+          description: Whether the same request/order may be retried.
+
+    KeyValue:
+      type: object
+      description: A generic key/value pair.
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+
+    SubAccount:
+      type: object
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        entityType:
+          type: string
+          enum: [CORPORATE, INDIVIDUAL]
+        status:
+          type: string
+          example: ACTIVE
+        remark:
+          type: string
+        createTime:
+          type: integer
+          format: int64
+          description: Millisecond Unix timestamp.
+
+    KybCreateRequest:
+      type: object
+      required: [userId]
+      description: |
+        Platform KYB submission. `subject`, `representatives`, and `documents`
+        carry canonical keys as documented in the Platform KYB Field Reference.
+      properties:
+        userId:
+          type: string
+          description: Sub-account UUID. A `userId` has a single platform KYB application.
+        subject:
+          $ref: '#/components/schemas/KybFieldGroup'
+        representatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/KybRepresentative'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/KybDocument'
+
+    KybFieldGroup:
+      type: object
+      description: "A group of canonical key/value fields: `{ fields: [ { key, value } ] }`."
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeyValue'
+
+    KybRepresentative:
+      type: object
+      description: One natural person, identified by `representativeRef`.
+      properties:
+        representativeRef:
+          type: string
+          description: Stable per-person id; keep unchanged across supplements.
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeyValue'
+
+    KybDocument:
+      type: object
+      description: A KYB document reference. Upload the file first, then reference by `fileId`.
+      properties:
+        purpose:
+          type: string
+          description: The document's canonical key (e.g. `subject.sourceOfFundsProof`).
+        fileId:
+          type: string
+        scope:
+          type: string
+          enum: [SUBJECT, REPRESENTATIVE]
+        representativeRef:
+          type: string
+          description: Required when `scope = REPRESENTATIVE`.
+
+    KybStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          description: "`SUBMITTED` / `PENDING` / `SUPPLEMENT_REQUIRED` / `APPROVED` / `REJECTED`."
+          enum: [SUBMITTED, PENDING, SUPPLEMENT_REQUIRED, APPROVED, REJECTED]
+        reason:
+          type: string
+          description: Review conclusion code; empty before review.
+        message:
+          type: string
+          description: Conclusion description; empty before review.
+
+    Requirement:
+      type: object
+      description: A dynamic channel-KYB requirement item.
+      properties:
+        key:
+          type: string
+        kind:
+          type: string
+          enum: [FIELD, DOCUMENT]
+        mode:
+          type: string
+          enum: [REQUIRED, OPTIONAL, CONDITIONAL]
+          description: Source of truth for whether to submit the item.
+        label:
+          type: string
+        regex:
+          type: string
+        example:
+          type: string
+        enumValues:
+          type: array
+          items:
+            type: string
+
+    ChannelRequirements:
+      type: object
+      description: Items still required for channel deposit onboarding.
+      properties:
+        subjectFields:
+          type: array
+          items:
+            $ref: '#/components/schemas/Requirement'
+          description: Subject fields still missing.
+        subjectDocuments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Requirement'
+          description: Subject documents still missing (flattened, one per purpose).
+        requiresRepresentatives:
+          type: boolean
+        representatives:
+          type: array
+          description: "What each contact still needs, one entry per contact."
+          items:
+            type: object
+            properties:
+              representativeRef:
+                type: string
+              fields:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Requirement'
+              documents:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Requirement'
+        fileLimit:
+          type: object
+          properties:
+            maxFileCount:
+              type: integer
+            maxFileBytes:
+              type: integer
+              format: int64
+            maxTotalBytes:
+              type: integer
+              format: int64
+            contentTypes:
+              type: array
+              items:
+                type: string
+        tosMode:
+          type: string
+          enum: [NONE, HOSTED_LINK, INLINE_ACCEPT]
+        tosUrl:
+          type: string
+          description: Terms URL; empty when `NONE`.
+        termsVersion:
+          type: string
+          description: Terms version; non-empty only for `INLINE_ACCEPT`.
+        requiresBusinessType:
+          type: boolean
+          description: Always `false` in this API - the business type comes from platform KYB.
+
+    FieldRequirement:
+      type: object
+      description: A payout-account field requirement.
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        required:
+          type: boolean
+        regex:
+          type: string
+        isExtra:
+          type: boolean
+          description: When `true`, put the value into `channelExtra`.
+        kind:
+          type: string
+          enum: [FIELD, DOCUMENT]
+          description: A `DOCUMENT` field is supplied via `spec.documents` (by `fileId`).
+
+    DepositAccount:
+      type: object
+      properties:
+        channel:
+          type: string
+        accountId:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, UNAVAILABLE, CLOSED]
+          description: "`PENDING` (not yet remittable) / `ACTIVE` (remittable) / `UNAVAILABLE` / `CLOSED`."
+        channelStatus:
+          type: string
+        instructions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FundingInstruction'
+        feeAmount:
+          type: string
+        minDepositAmount:
+          type: string
+        maxDepositAmount:
+          type: string
+
+    FundingInstruction:
+      type: object
+      description: Wire funding instruction fields.
+      properties:
+        rails:
+          type: array
+          items:
+            type: string
+        message:
+          type: string
+        bankName:
+          type: string
+        bankAddress:
+          type: string
+        accountNumber:
+          type: string
+        routingCode:
+          type: string
+        routingCodeAlternate:
+          type: string
+        swiftBic:
+          type: string
+        accountHolderName:
+          type: string
+        accountHolderAddress:
+          type: string
+        reference:
+          type: string
+        channelExtra:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeyValue'
+
+    DepositOrder:
+      type: object
+      properties:
+        orderId:
+          type: string
+        channel:
+          type: string
+        creditCurrency:
+          type: string
+        receivedCurrency:
+          type: string
+        receivedAmount:
+          type: string
+        feeAmount:
+          type: string
+        creditAmount:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, CREDITED, COMPLETED, FAILED, CANCELED]
+          description: "`PENDING` (processing) / `CREDITED` (credited, not settled) / `COMPLETED` (final) / `FAILED` (final) / `CANCELED` (final)."
+        rail:
+          type: string
+        rate:
+          type: string
+        reason:
+          $ref: '#/components/schemas/Reason'
+        createdAt:
+          type: integer
+          format: int64
+          description: Millisecond Unix timestamp; `0` until the event occurs.
+        updatedAt:
+          type: integer
+          format: int64
+        creditedAt:
+          type: integer
+          format: int64
+          description: "`0` before crediting."
+        completedAt:
+          type: integer
+          format: int64
+          description: "`0` before the order is final."
+
+    PayoutAccount:
+      type: object
+      properties:
+        accountId:
+          type: string
+        channel:
+          type: string
+        status:
+          type: string
+          enum: [IN_REVIEW, AVAILABLE, NEEDS_UPDATE, UNAVAILABLE, DELETED]
+        rejectReason:
+          $ref: '#/components/schemas/Reason'
+        accountLast4:
+          type: string
+        bankName:
+          type: string
+        currency:
+          type: string
+        country:
+          type: string
+        rail:
+          type: string
+        accountHolderName:
+          type: string
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        editableFields:
+          type: array
+          items:
+            type: string
+          description: Fields that may be changed via Update Payout Account.
+
+    PayoutAccountSpec:
+      type: object
+      description: Payout-account spec; fields constrained by the requirements endpoint.
+      properties:
+        currency:
+          type: string
+        country:
+          type: string
+        rail:
+          type: string
+        holderType:
+          type: string
+          enum: [INDIVIDUAL, BUSINESS]
+        accountHolderName:
+          type: string
+        accountHolderAddress:
+          type: string
+        bankName:
+          type: string
+        routingNumber:
+          type: string
+        accountNumber:
+          type: string
+        accountType:
+          type: string
+          enum: [CHECKING, SAVINGS]
+        fileIds:
+          type: array
+          items:
+            type: string
+        channelExtra:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeyValue'
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              purpose:
+                type: string
+                description: The requirement `key` whose `kind` is `DOCUMENT`.
+              fileId:
+                type: string
+
+    PayoutOrder:
+      type: object
+      properties:
+        orderId:
+          type: string
+        clientOrderId:
+          type: string
+        channel:
+          type: string
+        payoutAccountId:
+          type: string
+        sourceCurrency:
+          type: string
+        targetCurrency:
+          type: string
+        amount:
+          type: string
+        feeAmount:
+          type: string
+        finalAmount:
+          type: string
+        rate:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, IN_REVIEW, PROCESSING, COMPLETED, FAILED, RETURNED, REFUNDING, REFUNDED]
+          description: "`COMPLETED` / `FAILED` are final."
+        reason:
+          $ref: '#/components/schemas/Reason'
+        rail:
+          type: string
+        createdAt:
+          type: integer
+          format: int64
+        updatedAt:
+          type: integer
+          format: int64
+        completedAt:
+          type: integer
+          format: int64
+          description: "`0` before the order is final."
+        refundedAt:
+          type: integer
+          format: int64
+          description: "`0` before any refund."
+
+    Currency:
+      type: object
+      properties:
+        currency:
+          type: string
+        displayName:
+          type: string
+        fullName:
+          type: string
+        chainList:
+          type: array
+          items:
+            $ref: '#/components/schemas/Chain'
+
+    Chain:
+      type: object
+      properties:
+        chain:
+          type: string
+        txType:
+          type: string
+        depositEnable:
+          type: boolean
+        withdrawEnable:
+          type: boolean
+        depositMin:
+          type: string
+        withdrawMin:
+          type: string
+        withdrawMax:
+          type: string
+        withdrawFee:
+          type: string
+        hasTag:
+          type: boolean
+        confirm:
+          type: integer
+        withdrawPrecision:
+          type: integer
+        contractAddress:
+          type: string
+        walletType:
+          type: string
+        preConfirm:
+          type: integer
+
+    AssetRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        currency:
+          type: string
+        chain:
+          type: string
+        type:
+          type: string
+          enum: [deposit, withdraw]
+        internal:
+          type: boolean
+        address:
+          type: string
+        tag:
+          type: string
+        addressFrom:
+          type: string
+        tagFrom:
+          type: string
+        amount:
+          type: string
+        fee:
+          type: string
+        status:
+          type: string
+        hash:
+          type: string
+        confirmations:
+          type: integer
+        note:
+          type: string
+        approvalReason:
+          type: string
+        createTime:
+          type: integer
+          format: int64
+        updateTime:
+          type: integer
+          format: int64
+
+    AddressBookEntry:
+      type: object
+      properties:
+        addressId:
+          type: string
+        currency:
+          type: string
+        chain:
+          type: string
+        address:
+          type: string
+        memo:
+          type: string
+        label:
+          type: string
+        whitelist:
+          type: boolean
+        createTime:
+          type: integer
+          format: int64
+
+    Balance:
+      type: object
+      properties:
+        coin:
+          type: string
+        free:
+          type: string
+          description: 8-decimal decimal string.
+        frozen:
+          type: string
+          description: 8-decimal decimal string.
+
+    ConvertRecord:
+      type: object
+      properties:
+        orderId:
+          type: string
+        baseCoin:
+          type: string
+        quoteCoin:
+          type: string
+        baseAmount:
+          type: string
+        quoteAmount:
+          type: string
+        side:
+          type: string
+          enum: [BUY, SELL]
+        price:
+          type: string
+        status:
+          type: string
+        failReason:
+          type: string
+        createTime:
+          type: integer
+          format: int64
+        updateTime:
+          type: integer
+          format: int64
+
+  responses:
+    BadRequest:
+      description: Bad Request - the request body could not be read.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/BaseResponse'
+          example:
+            result: false
+            code: P_PAY_OPEN_API_INVALID_ARGUMENT
+            message: invalid argument
+            timestamp: 1785706000000
+
+    Unauthorized:
+      description: Unauthorized - authentication failed (missing key, bad signature, etc.).
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/BaseResponse'
+          example:
+            result: false
+            code: P_PAY_OPEN_API_UNAUTHENTICATED
+            message: authentication failed
+            timestamp: 1785706000000
+
+    InternalError:
+      description: |
+        Internal or business error. Note that most business failures are returned
+        as HTTP `200` with `result: false` and a `code`; this `500` covers
+        server-side internal errors.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/BaseResponse'
+          example:
+            result: false
+            code: P_PAY_OPEN_API_INTERNAL_ERROR
+            message: internal error
+            timestamp: 1785706000000
