@@ -711,7 +711,7 @@ paths:
         Do not pass `country` or `businessType` - the requirement set follows the
         values from your platform KYB (`subject.country` / `subject.businessType`).
 
-        > **`channel` currently supports only `bridge`.**
+        > **`channel` currently supports `fvbank` and `straitsx`.**
       operationId: institutionDepositAccountRequirements
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -719,10 +719,10 @@ paths:
         - name: channel
           in: query
           required: true
-          description: Channel identifier. Currently only `bridge` is supported.
+          description: Channel identifier. Currently supports `fvbank` and `straitsx`.
           schema:
             type: string
-            example: bridge
+            example: fvbank
       responses:
         '200':
           description: Successful response
@@ -783,8 +783,8 @@ paths:
                   description: Sub-account UUID.
                 channel:
                   type: string
-                  description: Channel. Currently only `bridge` is supported.
-                  example: bridge
+                  description: Channel. Currently supports `fvbank` and `straitsx`.
+                  example: fvbank
                 signedAgreementId:
                   type: string
                   description: For `tosMode = HOSTED_LINK`.
@@ -844,10 +844,10 @@ paths:
         - name: channel
           in: query
           required: true
-          description: Channel. Currently only `bridge` is supported.
+          description: Channel. Currently supports `fvbank` and `straitsx`.
           schema:
             type: string
-            example: bridge
+            example: fvbank
       responses:
         '200':
           description: Successful response
