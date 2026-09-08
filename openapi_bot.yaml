@@ -169,7 +169,7 @@ paths:
           in: query
           description: |
             Order type filter. Can pass multiple values. If omitted, returns all types.
-            Supported values: `futures_grid`, `spot_grid`, `smart_copy`.
+            Supported values: `futures_grid`, `future_hedge_grid` (Cross Margin Futures Grid), `spot_grid`, `smart_copy`.
           schema:
             type: array
             items:
@@ -1865,7 +1865,7 @@ components:
         buOrderType:
           type: string
           description: |
-            Bot order type. Supported values: `futures_grid`, `spot_grid`, `smart_copy`.
+            Bot order type. Supported values: `futures_grid`, `future_hedge_grid` (Cross Margin Futures Grid), `spot_grid`, `smart_copy`.
         buOrderId:
           type: string
           description: Bot order ID
