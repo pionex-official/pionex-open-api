@@ -169,7 +169,7 @@ paths:
           in: query
           description: |
             Order type filter. Can pass multiple values. If omitted, returns all types.
-            Supported values: `futures_grid`, `spot_grid`, `smart_copy`.
+            Supported values: `futures_grid`, `future_hedge_grid` (Cross Margin Futures Grid), `spot_grid`, `smart_copy`.
           schema:
             type: array
             items:
@@ -1865,7 +1865,7 @@ components:
         buOrderType:
           type: string
           description: |
-            Bot order type. Supported values: `futures_grid`, `spot_grid`, `smart_copy`.
+            Bot order type. Supported values: `futures_grid`, `future_hedge_grid` (Cross Margin Futures Grid), `spot_grid`, `smart_copy`.
         buOrderId:
           type: string
           description: Bot order ID
@@ -1931,7 +1931,12 @@ components:
           description: Copy bot order ID
         buOrderData:
           type: object
-          description: "Order detail data (dynamic structure depending on buOrderType)"
+          description: |
+            Order detail data. The structure depends on `buOrderType`:
+            `futures_grid` -> `FuturesGridOrderData`,
+            `future_hedge_grid` -> `FutureHedgeGridOrderData`,
+            `spot_grid` -> `SpotGridOrderData`,
+            `smart_copy` -> `SmartCopyOrderData`
 
     FuturesGridOrder:
       type: object
@@ -2374,6 +2379,264 @@ components:
         addTime:
           type: number
           description: Add time in milliseconds
+
+    FutureHedgeGridOrderData:
+      type: object
+      description: |
+        Order detail data for cross margin futures grid (`future_hedge_grid`).
+        A hedge grid is a parent order that runs a `long` and a `short` sub-grid
+        simultaneously under one cross-margin account. The top-level fields are
+        aggregated across both sub-grids; per-direction detail is under `long`
+        and `short`.
+      properties:
+        initQuoteInvestment:
+          type: string
+          description: Initial total investment amount
+        initExtraMargin:
+          type: string
+          description: Initial extra margin
+        initBaseAmount:
+          type: string
+          description: Initial base amount
+        placedExchangeOrderCount:
+          type: number
+          description: Number of currently open exchange orders (aggregated)
+        closedExchangeOrderCount:
+          type: number
+          description: Number of closed exchange orders (aggregated)
+        exchangeOrderPairedCount:
+          type: number
+          description: Number of paired exchange orders (aggregated)
+        gridProfit:
+          type: string
+          description: Grid profit (aggregated)
+        totalVolume:
+          type: string
+          description: Total traded volume (aggregated)
+        totalFee:
+          type: string
+          description: Total fees (aggregated)
+        totalFundingFee:
+          type: string
+          description: Total funding fees (aggregated)
+        totalRealizedProfit:
+          type: string
+          description: Total realized profit (aggregated)
+        marginBalance:
+          type: string
+          description: Margin balance (after leverage)
+        status:
+          type: string
+          description: Bot status
+        riskStatus:
+          type: string
+          description: Overall risk status of the order
+        lossStopType:
+          type: string
+          description: |
+            Stop loss type:
+            `profit_amount` - By P&L amount,
+            `profit_ratio` - By P&L ratio
+          enum: [profit_amount, profit_ratio]
+        lossStop:
+          type: string
+          description: |
+            Stop loss value. Interpretation depends on lossStopType:
+            `profit_amount` -> stop loss amount,
+            `profit_ratio` -> stop loss ratio
+        profitStopType:
+          type: string
+          description: |
+            Take profit type:
+            `profit_amount` - By profit amount,
+            `profit_ratio` - By profit ratio
+          enum: [profit_amount, profit_ratio]
+        profitStop:
+          type: string
+          description: |
+            Take profit value. Interpretation depends on profitStopType:
+            `profit_amount` -> profit amount,
+            `profit_ratio` -> profit ratio
+        lossStopHigh:
+          type: string
+          description: Upper stop loss value
+        profitStopDelay:
+          type: number
+          description: Take profit trigger delay
+        lossStopDelay:
+          type: number
+          description: Stop loss trigger delay
+        shareRatio:
+          type: string
+          description: Profit sharing ratio
+        sharedProfit:
+          type: string
+          description: Shared profit on close (in quote)
+        long:
+          $ref: '#/components/schemas/FutureHedgeGridSubGrid'
+        short:
+          $ref: '#/components/schemas/FutureHedgeGridSubGrid'
+
+    FutureHedgeGridSubGrid:
+      type: object
+      description: One direction (long or short) of a cross margin futures grid hedge order.
+      properties:
+        buOrderId:
+          type: string
+          description: Sub-grid bot order ID
+        base:
+          type: string
+          description: Base currency
+        quote:
+          type: string
+          description: Quote currency
+        leverage:
+          type: number
+          description: Leverage multiplier
+        top:
+          type: string
+          description: Grid upper price
+        bottom:
+          type: string
+          description: Grid lower price
+        row:
+          type: number
+          description: Number of grid levels
+        gridType:
+          type: string
+          description: "Grid spacing type: `arithmetic` (equal difference) or `geometric` (equal ratio)"
+          enum: [arithmetic, geometric]
+        quoteInvestment:
+          type: string
+          description: Investment amount
+        status:
+          type: string
+          description: Sub-grid strategy status
+        initPrice:
+          type: string
+          description: Price at creation
+        initQuoteInvestment:
+          type: string
+          description: Initial investment amount
+        createTime:
+          type: number
+          description: Creation timestamp in milliseconds
+        closeTime:
+          type: number
+          description: Close timestamp in milliseconds
+        closedPrice:
+          type: string
+          description: Close price
+        reasonBy:
+          type: string
+          description: Close reason
+        perVolume:
+          type: string
+          description: Volume per grid level
+        baseAmount:
+          type: string
+          description: Base amount
+        quoteAmount:
+          type: string
+          description: Quote amount
+        placedExchangeOrderCount:
+          type: number
+          description: Number of currently open exchange orders
+        closedExchangeOrderCount:
+          type: number
+          description: Number of closed exchange orders
+        exchangeOrderPairedCount:
+          type: number
+          description: Number of paired exchange orders
+        gridProfit:
+          type: string
+          description: Grid profit
+        profitWithdrawn:
+          type: string
+          description: Withdrawn grid profit
+        totalVolume:
+          type: string
+          description: Total traded volume
+        totalFee:
+          type: string
+          description: Total fees
+        totalFundingFee:
+          type: string
+          description: Total funding fees
+        totalRealizedProfit:
+          type: string
+          description: Realized profit
+        condition:
+          type: string
+          description: Condition trigger price
+        conditionDirection:
+          type: string
+          description: Condition order direction
+        triggerTime:
+          type: number
+          description: Trigger timestamp in milliseconds
+        riskStatus:
+          type: string
+          description: Risk status
+        liquidationTriggered:
+          type: boolean
+          description: Whether liquidation was triggered
+        liquidationPrice:
+          type: string
+          description: Actual liquidation price
+        liquidationFee:
+          type: string
+          description: Liquidation fee
+        estimateLiquidationPrice:
+          type: string
+          description: Estimated liquidation price
+        position:
+          type: string
+          description: Current position size
+        positionOpenPrice:
+          type: string
+          description: Position open price
+        marginBalance:
+          type: string
+          description: Margin balance (after leverage)
+        extraMargin:
+          type: string
+          description: Extra margin amount
+        trx24h:
+          type: number
+          description: Transaction count in the last 24 hours
+        lossStopType:
+          type: string
+          description: |
+            Stop loss type:
+            `profit_amount` - By P&L amount,
+            `profit_ratio` - By P&L ratio
+          enum: [profit_amount, profit_ratio]
+        lossStop:
+          type: string
+          description: |
+            Stop loss value. Interpretation depends on lossStopType:
+            `profit_amount` -> stop loss amount,
+            `profit_ratio` -> stop loss ratio
+        profitStopType:
+          type: string
+          description: |
+            Take profit type:
+            `profit_amount` - By profit amount,
+            `profit_ratio` - By profit ratio
+          enum: [profit_amount, profit_ratio]
+        profitStop:
+          type: string
+          description: |
+            Take profit value. Interpretation depends on profitStopType:
+            `profit_amount` -> profit amount,
+            `profit_ratio` -> profit ratio
+        lossStopHigh:
+          type: string
+          description: Upper stop loss value
+        unlockQuoteAmount:
+          type: string
+          description: Quote amount returned to main account
 
     CreateFuturesGridRequest:
       type: object
