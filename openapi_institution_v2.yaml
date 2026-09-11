@@ -1469,6 +1469,60 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v2/institution/asset/address:
+    get:
+      tags: [Asset]
+      summary: Get a deposit address
+      description: |
+        Get the on-chain deposit address for a given `currency` + `chain` on the
+        target sub-account. Addresses are isolated per sub-account. Requires the
+        `read` scope.
+      operationId: institutionAssetAddress
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/UserIdQueryRequired'
+        - name: currency
+          in: query
+          required: true
+          description: e.g. `USDT`, max 60.
+          schema:
+            type: string
+            maxLength: 60
+        - name: chain
+          in: query
+          required: true
+          description: A deposit-enabled chain from List Currencies (e.g. `TRC20`, `ERC20`), max 60.
+          schema:
+            type: string
+            maxLength: 60
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                            description: Deposit address.
+                            example: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+                          tag:
+                            type: string
+                            description: Address Tag/Memo, required by some chains (e.g. XRP, EOS); empty when not applicable.
+                            example: ""
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/v2/institution/asset/withdraw:
     post:
       tags: [Asset]
