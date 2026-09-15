@@ -409,7 +409,6 @@ paths:
         | `subject.phone.countryCode` | C | C | Intl. dialing code without `+` (e.g. `852`, `1`). Required if phone is provided. |
         | `subject.phone.number` | C | C | Required if phone is provided. <=20. |
         | `subject.website` | O | O | Must include scheme (`https://`), <=256. Recommended for e-commerce/platform businesses. |
-        | `subject.notifyUrl` | O | O | Review-result callback URL. |
         | `subject.registeredAddress.addressLine1` | M | M | Street + number, <=200. **No P.O. Box**; US must include a street number. |
         | `subject.registeredAddress.addressLine2` | O | O | Room/floor/unit, <=200. |
         | `subject.registeredAddress.city` | M | M | <=100. |
@@ -2304,8 +2303,8 @@ components:
       properties:
         status:
           type: string
-          description: "`SUBMITTED` / `PENDING` / `SUPPLEMENT_REQUIRED` / `APPROVED` / `REJECTED`."
-          enum: [SUBMITTED, PENDING, SUPPLEMENT_REQUIRED, APPROVED, REJECTED]
+          description: "`SUBMITTED` / `APPROVED` / `REJECTED`."
+          enum: [SUBMITTED, APPROVED, REJECTED]
         reason:
           type: string
           description: Review conclusion code; empty before review.
