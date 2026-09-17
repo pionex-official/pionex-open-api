@@ -147,10 +147,11 @@ info:
     Contact Pionex to grant your key the scopes your integration needs; the scopes
     attached to a key cannot be changed by the caller.
 
-    ## Base Error Codes
+    ## Error Codes
 
-    Codes below may be returned by any endpoint. Endpoint-specific business codes
-    are listed with the relevant endpoint.
+    When `result` is `false` the response carries a top-level string `code`. Codes
+    have no numeric form. The codes below may be returned by any endpoint;
+    endpoint-specific codes are listed in each endpoint's **Errors** table.
 
     | Error Code | Description |
     |------------|-------------|
@@ -164,6 +165,54 @@ info:
     | `P_PAY_OPEN_API_INTERNAL_ERROR` | Internal error. |
     | `P_PAY_OPEN_API_OPERATION_NOT_SUPPORTED` | The channel does not support this operation. Do not retry. |
     | `P_PAY_OPEN_API_CHANNEL_NOT_SUPPORTED_IN_REGION` | The requested `channel` is not available for your integration. Do not retry with the same channel. |
+
+    ### Wire channel error codes
+
+    `wire/*` endpoints pass failures from the underlying fiat channel through under
+    the `P_PAY_OPEN_API_WIRE_` prefix, but only when the request is rejected
+    **before** an order is created. Once an order is created the call succeeds
+    (`result: true`) and any later failure is reported through the order's `reason`
+    object instead (see Order Failure Reasons). A given channel returns only the
+    wire codes that apply to it.
+
+    These wire codes can be returned by most `wire/*` endpoints:
+
+    | Error Code | Description |
+    |------------|-------------|
+    | `P_PAY_OPEN_API_WIRE_INVALID_PARAMS` | Request parameters are missing, malformed, or an invalid combination. |
+    | `P_PAY_OPEN_API_WIRE_SYSTEM_ERROR` | Channel-side or internal error; the result may be indeterminate — query by the original identifier or retry the request unchanged. |
+    | `P_PAY_OPEN_API_WIRE_NO_AVAILABLE_CHANNEL` | `channel` was omitted and none could be selected automatically (only endpoints where `channel` is optional). |
+    | `P_PAY_OPEN_API_WIRE_CHANNEL_UNIMPLEMENTED` | The selected channel does not implement this operation. |
+    | `P_PAY_OPEN_API_WIRE_INSUFFICIENT_BALANCE` | Insufficient balance to accept the request. |
+
+    Every other `P_PAY_OPEN_API_WIRE_` code is endpoint-specific and is listed in
+    that endpoint's **Errors** table.
+
+    ## Order Failure Reasons
+
+    A created order that ends in a non-success state carries a `reason` object
+    `{ code, message, retryable }`. Branch on the stable string `code` and use
+    `retryable` as retry guidance; use `message` for display only. `reason.code`
+    has no numeric form.
+
+    Payout order `reason.code`:
+
+    | reason.code | retryable | Description |
+    |-------------|:---------:|-------------|
+    | `PAYOUT_REJECTED` | No | The payout was rejected. |
+    | `PAYOUT_CHECK_FAILED` | No | A pre-payout check failed. |
+    | `ACCOUNT_NOT_AVAILABLE` | No | The destination bank account is unavailable or was rejected. |
+    | `INSUFFICIENT_BALANCE` | No | The sub-account had insufficient funds when the transfer executed. |
+    | `CONVERSION_FAILED` | No | The stablecoin conversion / investment step failed. |
+    | `ADJUSTMENT_FAILED` | No | A fund-adjustment step failed. |
+    | `CHANNEL_ERROR` | No | The channel failed to execute the payout. |
+    | `CHANNEL_API_ERROR` | No | A channel API call failed. |
+    | `INTERNAL_ERROR` | Yes | Internal processing failed; safe to retry. |
+
+    `INSUFFICIENT_BALANCE` is an order-level reason, never an envelope `code`: the
+    balance is checked but **not locked** when the order is created, so a payout
+    that was already accepted can still fail later if the funds are spent before
+    the transfer executes.
 
   version: 2.0.0
   contact:
@@ -761,11 +810,12 @@ paths:
         | Error Code | Description |
         |------------|-------------|
         | `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED` | Platform KYB is not approved yet; it must be approved before channel onboarding. |
-        | `P_PAY_OPEN_API_KYB_ADDRESS_REJECTED` | Address rejected by the channel; `data.violations` names the rejected fields. |
-        | `P_PAY_OPEN_API_KYB_DOCUMENT_REJECTED` | A document was rejected or a required field is missing. |
-        | `P_PAY_OPEN_API_KYB_SUBJECT_TYPE_CONFLICT` | Another subject type already exists for this `userId`. |
-        | `P_PAY_OPEN_API_KYB_MANUAL_REVIEW_REQUIRED` | Additional review is required; do not resubmit with altered details. |
-        | `P_PAY_OPEN_API_KYB_SUBJECT_NOT_FOUND` | No matching company record was found. |
+        | `P_PAY_OPEN_API_WIRE_DUPLICATE_CLIENT_ORDER_ID` | An onboarding submission already exists, but this request's payload differs from it. |
+        | `P_PAY_OPEN_API_WIRE_CUSTOMER_INFO_REJECTED` | The company or representative information was rejected or conflicts with an existing record. |
+        | `P_PAY_OPEN_API_WIRE_SUBJECT_TYPE_CONFLICT` | This `userId` already has an individual subject, conflicting with company onboarding. |
+        | `P_PAY_OPEN_API_WIRE_KYB_OUTCOME_UNKNOWN` | The channel could not confirm the onboarding result; query the status before resubmitting. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionDepositAccountCreate
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -836,6 +886,14 @@ paths:
       description: |
         Returns the channel onboarding `status`. `status = NOT_CREATED` means not
         yet onboarded (not an error).
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_SUBJECT_TYPE_CONFLICT` | This `userId` already has an individual subject. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionDepositAccountStatus
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -882,6 +940,15 @@ paths:
         List the fiat deposit accounts for a `userId`. Requires the `userId`'s
         platform KYB to be `APPROVED` (otherwise
         `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED`).
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED` | Platform KYB is not approved yet. |
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | `currency` is set to something other than `USD`. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionDepositAccountsList
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -933,6 +1000,16 @@ paths:
       description: |
         List deposit orders for a `userId`. Requires the `userId`'s platform KYB to
         be `APPROVED`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | `currency` is set to something other than `USD`. |
+
+        Common and wire-common codes (see **Error Codes**) also apply. Failure
+        reasons on individual orders are reported through each order's `reason`
+        object (see **Order Failure Reasons**).
       operationId: institutionDepositOrdersList
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -990,6 +1067,14 @@ paths:
       description: |
         Get a single deposit order. On a non-success status (e.g. `FAILED`), the
         order also carries a `reason` object.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | No order exists for this `userId` + `channel` + `orderId`. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionDepositOrderGet
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1041,6 +1126,14 @@ paths:
         (default) or `DOCUMENT`; a `DOCUMENT` field is supplied via
         `spec.documents` (upload the file first, reference by `fileId`), not as a
         plain value.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | The `country` / `currency` / `rail` combination is not a supported USD corridor. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutAccountRequirements
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1102,6 +1195,53 @@ paths:
         requirements endpoint. Requires the `userId`'s platform KYB to be
         `APPROVED`. Wait for the account to reach `AVAILABLE` before submitting a
         payout against it.
+
+        ## Channel-specific `spec` fields
+
+        Base first-level `spec` fields are `currency`, `country`, `rail`,
+        `holderType`, `accountHolderName`, `bankName`, `accountNumber`. On top of
+        those, FV Bank and StraitsX need the beneficiary-bank details below. The
+        requirements endpoint stays authoritative for exactly which fields a
+        given corridor requires. Markers: **M** mandatory, **O** optional, `N/A`
+        not used by that channel.
+
+        These go into `spec.channelExtra` (an array of `{key, value}`; keys are
+        case-sensitive; an empty, duplicate, or unsupported key is rejected with
+        `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`):
+
+        | Key | FV | SX | Rules |
+        |-----|:--:|:--:|-------|
+        | `swiftBic` | M | M | Beneficiary bank SWIFT / BIC code. |
+        | `bankAddress` | M | M | Beneficiary bank full address. |
+        | `bankCity` | M | M | Beneficiary bank city. |
+        | `bankState` | M | M | Beneficiary bank state, province, or region. |
+        | `bankStreet` | O | O | Beneficiary bank street-address supplement. |
+        | `bankPostalCode` | M | M | Beneficiary bank postal code. |
+        | `intermediaryAba` | M | N/A | Intermediary / correspondent bank ABA routing number, exactly 9 digits (`^\d{9}$`). FV Bank only; StraitsX does not use it. |
+
+        StraitsX additionally requires a bank-account proof, supplied via
+        `spec.documents` (value is a `fileId`; upload the file first, then
+        reference it). FV Bank does not require any proof document.
+
+        | Key (`purpose`) | FV | SX | Notes |
+        |-----|:--:|:--:|-------|
+        | `bankAccountProof` | N/A | M | Bank-account ownership proof. Exactly one file; PDF / JPEG / PNG (type is detected from content); size > 0 and <= 12 MiB. Must go in `spec.documents`, not `channelExtra`. |
+
+        A missing proof, a duplicate submission, an unsupported file type, or any
+        other `purpose` value is rejected with
+        `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | Not a supported USD international-wire / country combination, or a base account field is missing. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The channel beneficiary or virtual account is not active yet. |
+        | `P_PAY_OPEN_API_WIRE_KYB_OUTCOME_UNKNOWN` | The channel could not confirm account creation, or matched more than one remote record. |
+
+        Common and wire-common codes (see **Error Codes**) also apply. If the
+        account is created but ends up unusable, the reason is on the account's
+        `rejectReason` object (see **Order Failure Reasons**).
       operationId: institutionPayoutAccountCreate
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1152,6 +1292,17 @@ paths:
       description: |
         List payout (payee) accounts for a `userId`. Requires the `userId`'s
         platform KYB to be `APPROVED`. Use `accountId` in payout requests.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | `currency` is set to something other than `USD`. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The StraitsX virtual account is not active. |
+
+        Common and wire-common codes (see **Error Codes**) also apply. An
+        individual account that is unusable carries its reason in `rejectReason`
+        (see **Order Failure Reasons**).
       operationId: institutionPayoutAccountsList
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1203,6 +1354,17 @@ paths:
         be `APPROVED`.
 
         > **`channel` currently supports only `straitsx`.**
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_OPERATION_NOT_SUPPORTED` | Delete is not supported for `fvbank`. |
+        | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | The account does not exist. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The StraitsX profile is unavailable. |
+        | `P_PAY_OPEN_API_WIRE_KYB_OUTCOME_UNKNOWN` | The remote account match was ambiguous. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutAccountDelete
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1257,6 +1419,21 @@ paths:
         **Idempotency:** always send a unique `clientOrderId`; on timeout/no-response,
         re-send with the **same** `clientOrderId` (or query first via List/Get
         Payout Order) - never retry with a new key.
+
+        **Errors:** these are returned only when the request is rejected before an
+        order is created. Once an order exists the call returns `result: true` and
+        any failure (insufficient balance, AML, etc.) is carried on the order's
+        `reason` object instead (see **Order Failure Reasons**).
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | Not a supported `sourceCurrency` → `targetCurrency` pair. |
+        | `P_PAY_OPEN_API_WIRE_AMOUNT_OUT_OF_RANGE` | The `amount` is invalid, below the minimum, or fails fee calculation. |
+        | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | The `payoutAccountId` does not exist. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The payout account is not ready (not yet `AVAILABLE`). |
+        | `P_PAY_OPEN_API_WIRE_DUPLICATE_CLIENT_ORDER_ID` | The `clientOrderId` was reused with a different channel, account, currency, or amount. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutOrderCreate
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1315,8 +1492,6 @@ paths:
                             type: string
                           finalAmount:
                             type: string
-                          reason:
-                            $ref: '#/components/schemas/Reason'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1382,6 +1557,14 @@ paths:
       description: |
         Get a single payout order by `orderId` **or** `clientOrderId`. Requires the
         `userId`'s platform KYB to be `APPROVED`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | No order matches the given `orderId` / `clientOrderId` for this `userId` + `channel`. |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutOrderGet
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -2442,6 +2625,42 @@ components:
         maxDepositAmount:
           type: string
 
+    Address:
+      type: object
+      description: Structured address (response side). `formatted` is the channel-rendered single line; the remaining fields are its parts.
+      properties:
+        formatted:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        stateProvinceRegion:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+
+    AddressInput:
+      type: object
+      description: Structured address (request side). No `formatted`; per-field constraints are channel-specific and come from the requirements endpoint.
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        stateProvinceRegion:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+
     FundingInstruction:
       type: object
       description: Wire funding instruction fields.
@@ -2455,7 +2674,7 @@ components:
         bankName:
           type: string
         bankAddress:
-          type: string
+          $ref: '#/components/schemas/Address'
         accountNumber:
           type: string
         routingCode:
@@ -2467,7 +2686,7 @@ components:
         accountHolderName:
           type: string
         accountHolderAddress:
-          type: string
+          $ref: '#/components/schemas/Address'
         reference:
           type: string
         channelExtra:
@@ -2570,7 +2789,7 @@ components:
         accountHolderName:
           type: string
         accountHolderAddress:
-          type: string
+          $ref: '#/components/schemas/AddressInput'
         bankName:
           type: string
         routingNumber:
