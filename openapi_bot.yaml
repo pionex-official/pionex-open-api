@@ -600,7 +600,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/FuturesGridResumeRequest'
+              $ref: '#/components/schemas/FuturesGridResumeCheckRequest'
       responses:
         '200':
           description: |
@@ -628,6 +628,20 @@ paths:
         Resume a paused futures grid order. Runs the same validation as `resumeCheck`, then
         executes. After resuming the grid restarts auto-refilling and the liquidation price
         moves with the market.
+
+        Supports trigger resume: set `triggerResumePriceUp` / `triggerResumePriceDown` (either
+        or both) to resume automatically once the market price crosses that level, instead of
+        resuming immediately. `isResumeImmediate` is optional and tri-state:
+        - Omitted: inferred from the trigger prices — both empty resumes immediately, either set
+          triggers a conditional resume.
+        - `true`: resume immediately now; any trigger prices are ignored (silently cleared, no
+          error even if they fail direction validation).
+        - `false`: conditional resume, keep the given trigger price(s). Passing `false` with both
+          trigger prices empty cancels trigger resume and keeps the order paused.
+
+        For a conditional resume, `triggerResumePriceUp` must be greater than the current market
+        price and `triggerResumePriceDown` must be greater than 0 and less than the current
+        market price; violating either returns HTTP 400 (see below) instead of dispatching.
         Weight: 1.
       operationId: resumeFuturesGrid
       security:
@@ -653,7 +667,17 @@ paths:
                       data:
                         $ref: '#/components/schemas/FuturesGridResumeResponse'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Bad request. Also returned when `triggerResumePriceUp` / `triggerResumePriceDown`
+            fails direction validation or fails to parse (not applicable when `isResumeImmediate`
+            resolves to `true`) — in that case the body uses `FuturesGridResumeInvalidTriggerPriceError`
+            instead of the generic `ErrorResponse` shape.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/FuturesGridResumeInvalidTriggerPriceError'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -2229,6 +2253,12 @@ components:
         triggerPausePriceDown:
           type: string
           description: Price trigger for pause (downward)
+        triggerResumePriceUp:
+          type: string
+          description: Price trigger for resume (upward), set via the resume endpoint
+        triggerResumePriceDown:
+          type: string
+          description: Price trigger for resume (downward), set via the resume endpoint
         profitReduce:
           type: string
           description: Grid profit from position reduction (accumulated)
@@ -3252,6 +3282,14 @@ components:
           type: string
           description: Effective downward trigger price
 
+    FuturesGridResumeCheckRequest:
+      type: object
+      required: [buOrderId]
+      properties:
+        buOrderId:
+          type: string
+          description: Bot order ID
+
     FuturesGridResumeRequest:
       type: object
       required: [buOrderId]
@@ -3259,6 +3297,23 @@ components:
         buOrderId:
           type: string
           description: Bot order ID
+        triggerResumePriceUp:
+          type: string
+          description: >-
+            Upward trigger price for a conditional resume. Must be greater than the current
+            market price. Independent from triggerResumePriceDown — set either or both.
+        triggerResumePriceDown:
+          type: string
+          description: >-
+            Downward trigger price for a conditional resume. Must be greater than 0 and less
+            than the current market price.
+        isResumeImmediate:
+          type: boolean
+          description: >-
+            Optional tri-state flag. `true` = resume immediately (trigger prices ignored).
+            `false` = conditional resume, keep the given trigger price(s); with both trigger
+            prices empty this cancels trigger resume and keeps the order paused. Omitted =
+            inferred from the trigger prices (both empty -> immediate, either set -> conditional).
 
     FuturesGridResumeCheckResponse:
       type: object
@@ -3288,6 +3343,25 @@ components:
         message:
           type: string
           description: RPC return message
+
+    FuturesGridResumeInvalidTriggerPriceError:
+      type: object
+      description: >-
+        400 body returned when triggerResumePriceUp / triggerResumePriceDown fails direction
+        validation or fails to parse. Rejected before dispatching; the order stays paused.
+      properties:
+        code:
+          type: integer
+          description: Fixed `40000700`.
+        reason:
+          type: string
+          description: Fixed `P_TRADING_BOT_INVALID_TRIGGER_PRICE_PARAM`.
+        message:
+          type: string
+          description: Specific validation error detail.
+        data:
+          nullable: true
+          description: Always null.
 
     FuturesGridMarginCheckRequest:
       type: object
