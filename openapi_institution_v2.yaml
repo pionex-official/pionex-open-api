@@ -183,7 +183,6 @@ info:
     | `P_PAY_OPEN_API_WIRE_SYSTEM_ERROR` | Channel-side or internal error; the result may be indeterminate — query by the original identifier or retry the request unchanged. |
     | `P_PAY_OPEN_API_WIRE_NO_AVAILABLE_CHANNEL` | `channel` was omitted and none could be selected automatically (only endpoints where `channel` is optional). |
     | `P_PAY_OPEN_API_WIRE_CHANNEL_UNIMPLEMENTED` | The selected channel does not implement this operation. |
-    | `P_PAY_OPEN_API_WIRE_INSUFFICIENT_BALANCE` | Insufficient balance to accept the request. |
 
     Every other `P_PAY_OPEN_API_WIRE_` code is endpoint-specific and is listed in
     that endpoint's **Errors** table.
@@ -208,11 +207,6 @@ info:
     | `CHANNEL_ERROR` | No | The channel failed to execute the payout. |
     | `CHANNEL_API_ERROR` | No | A channel API call failed. |
     | `INTERNAL_ERROR` | Yes | Internal processing failed; safe to retry. |
-
-    `INSUFFICIENT_BALANCE` is an order-level reason, never an envelope `code`: the
-    balance is checked but **not locked** when the order is created, so a payout
-    that was already accepted can still fail later if the funds are spent before
-    the transfer executes.
 
   version: 2.0.0
   contact:
@@ -759,7 +753,7 @@ paths:
         Do not pass `country` or `businessType` - the requirement set follows the
         values from your platform KYB (`subject.country` / `subject.businessType`).
 
-        > **`channel` currently supports `fvbank` and `straitsx`.**
+        > **`channel` currently supports `FV Bank` and `SCB/DBS Bank`.**
       operationId: institutionDepositAccountRequirements
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -767,10 +761,10 @@ paths:
         - name: channel
           in: query
           required: true
-          description: Channel identifier. Currently supports `fvbank` and `straitsx`.
+          description: Channel identifier. Currently supports `FV Bank` and `SCB/DBS Bank`.
           schema:
             type: string
-            example: fvbank
+            example: "FV Bank"
       responses:
         '200':
           description: Successful response
@@ -832,8 +826,8 @@ paths:
                   description: Sub-account UUID.
                 channel:
                   type: string
-                  description: Channel. Currently supports `fvbank` and `straitsx`.
-                  example: fvbank
+                  description: Channel. Currently supports `FV Bank` and `SCB/DBS Bank`.
+                  example: "FV Bank"
                 signedAgreementId:
                   type: string
                   description: For `tosMode = HOSTED_LINK`.
@@ -901,10 +895,10 @@ paths:
         - name: channel
           in: query
           required: true
-          description: Channel. Currently supports `fvbank` and `straitsx`.
+          description: Channel. Currently supports `FV Bank` and `SCB/DBS Bank`.
           schema:
             type: string
-            example: fvbank
+            example: "FV Bank"
       responses:
         '200':
           description: Successful response
@@ -1200,7 +1194,7 @@ paths:
 
         Base first-level `spec` fields are `currency`, `country`, `rail`,
         `holderType`, `accountHolderName`, `bankName`, `accountNumber`. On top of
-        those, FV Bank and StraitsX need the beneficiary-bank details below. The
+        those, FV Bank and SCB/DBS Bank need the beneficiary-bank details below. The
         requirements endpoint stays authoritative for exactly which fields a
         given corridor requires. Markers: **M** mandatory, **O** optional, `N/A`
         not used by that channel.
@@ -1217,9 +1211,9 @@ paths:
         | `bankState` | M | M | Beneficiary bank state, province, or region. |
         | `bankStreet` | O | O | Beneficiary bank street-address supplement. |
         | `bankPostalCode` | M | M | Beneficiary bank postal code. |
-        | `intermediaryAba` | M | N/A | Intermediary / correspondent bank ABA routing number, exactly 9 digits (`^\d{9}$`). FV Bank only; StraitsX does not use it. |
+        | `intermediaryAba` | M | N/A | Intermediary / correspondent bank ABA routing number, exactly 9 digits (`^\d{9}$`). FV Bank only; SCB/DBS Bank does not use it. |
 
-        StraitsX additionally requires a bank-account proof, supplied via
+        SCB/DBS Bank additionally requires a bank-account proof, supplied via
         `spec.documents` (value is a `fileId`; upload the file first, then
         reference it). FV Bank does not require any proof document.
 
@@ -1298,7 +1292,7 @@ paths:
         | Error Code | Description |
         |------------|-------------|
         | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | `currency` is set to something other than `USD`. |
-        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The StraitsX virtual account is not active. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The SCB/DBS Bank virtual account is not active. |
 
         Common and wire-common codes (see **Error Codes**) also apply. An
         individual account that is unusable carries its reason in `rejectReason`
@@ -1353,15 +1347,15 @@ paths:
         Delete a payout (payee) account. Requires the `userId`'s platform KYB to
         be `APPROVED`.
 
-        > **`channel` currently supports only `straitsx`.**
+        > **`channel` currently supports only `SCB/DBS Bank`.**
 
         **Errors:**
 
         | Error Code | Description |
         |------------|-------------|
-        | `P_PAY_OPEN_API_OPERATION_NOT_SUPPORTED` | Delete is not supported for `fvbank`. |
+        | `P_PAY_OPEN_API_OPERATION_NOT_SUPPORTED` | Delete is not supported for `FV Bank`. |
         | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | The account does not exist. |
-        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The StraitsX profile is unavailable. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The SCB/DBS Bank profile is unavailable. |
         | `P_PAY_OPEN_API_WIRE_KYB_OUTCOME_UNKNOWN` | The remote account match was ambiguous. |
 
         Common and wire-common codes (see **Error Codes**) also apply.
@@ -1382,8 +1376,8 @@ paths:
                   type: string
                 channel:
                   type: string
-                  description: Channel. Currently only `straitsx` is supported.
-                  example: straitsx
+                  description: Channel. Currently only `SCB/DBS Bank` is supported.
+                  example: "SCB/DBS Bank"
       responses:
         '200':
           description: Successful response
@@ -2915,45 +2909,83 @@ components:
       properties:
         id:
           type: string
+          description: System order ID.
         clientId:
           type: string
+          description: Client-supplied idempotency ID.
         currency:
           type: string
+          description: Currency, e.g. `USDT`.
         chain:
           type: string
+          description: Chain name, e.g. `TRC20`.
         type:
           type: string
-          enum: [deposit, withdraw]
+          enum: [DEPOSIT, WITHDRAW]
+          description: Record type.
         internal:
           type: boolean
+          description: Whether this is an internal (off-chain) transfer.
         address:
           type: string
+          description: Destination address.
         tag:
           type: string
+          description: Destination address Tag/Memo; empty when not applicable.
         addressFrom:
           type: string
+          description: Source address.
         tagFrom:
           type: string
+          description: Source address Tag/Memo.
         amount:
           type: string
+          description: Amount.
         fee:
           type: string
+          description: Fee.
         status:
           type: string
+          enum: [NOTIFIED, RECEIVED, CONFIRMED, ABNORMAL, IRREGULAR, TR_IRREGULAR, RISKY, VERIFY, APPLIED, APPROVED, SHORTAGE, REJECTED, REMITTED, FINISHED, CANCELED, FAILED, HICOIN_REJECTED]
+          description: >
+            On-chain record status. The applicable set depends on `type`.
+
+
+            Deposit (`type = DEPOSIT`): `NOTIFIED` (deposit detected, awaiting
+            receipt), `RECEIVED` (funds received, pending confirmations),
+            `CONFIRMED` (confirmed and credited — final success), `ABNORMAL`
+            (abnormal deposit requiring attention), `IRREGULAR` (flagged as
+            irregular / non-compliant), `TR_IRREGULAR` (held by Travel Rule
+            screening), `RISKY` (flagged as risky by risk control), `VERIFY`
+            (pending manual verification).
+
+
+            Withdrawal (`type = WITHDRAW`): `APPLIED` (request submitted),
+            `APPROVED` (approved, pending remittance), `SHORTAGE` (insufficient
+            balance to process), `REJECTED` (rejected during review), `REMITTED`
+            (remitted / broadcast on-chain), `FINISHED` (completed — final
+            success), `CANCELED` (canceled), `FAILED` (failed),
+            `HICOIN_REJECTED` (rejected by the wallet service).
         hash:
           type: string
+          description: On-chain transaction hash.
         confirmations:
           type: integer
+          description: Number of on-chain confirmations.
         note:
           type: string
+          description: Note.
         approvalReason:
           type: string
+          description: Approval/review reason.
         createTime:
           type: integer
           format: int64
+          description: Creation time (millisecond Unix timestamp).
         updateTime:
           type: integer
           format: int64
+          description: Last-update time (millisecond Unix timestamp).
 
     AddressBookEntry:
       type: object
