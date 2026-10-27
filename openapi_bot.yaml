@@ -67,6 +67,7 @@ info:
     **Endpoints requiring `Bot reading` permission:**
     - `GET /api/v1/bot/orders` — Get bot order list
     - `GET /api/v1/bot/orders/futuresGrid/order` — Get futures grid order
+    - `GET /api/v1/bot/orders/futuresGrid/aiStrategy` — Get futures grid AI strategy
     - `GET /api/v1/bot/orders/spotGrid/order` — Get spot grid order
     - `GET /api/v1/bot/orders/spotGrid/aiStrategy` — Get spot grid AI strategy
     - `POST /api/v1/bot/orders/futuresGrid/checkParams` — Check futures grid parameters
@@ -224,6 +225,59 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/FuturesGridOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/bot/orders/futuresGrid/aiStrategy:
+    get:
+      tags: [Futures Grid]
+      summary: Get futures grid AI strategy
+      description: |
+        Query AI-recommended futures grid strategy parameters (price range, grid count, leverage,
+        estimated APR / drawdown / volatility, suitable investment range, etc.) for a trading pair
+        and direction. Weight: 1.
+
+        Only the standard futures grid tier is returned. `trend` accepts `long`, `short`, or
+        `no_trend`; any other value (including `hedging`) is rejected with `BOT_INVALID_ARGUMENT`.
+        An unknown or not-yet-ranked trading pair returns `result=true` with an empty `options` array.
+      operationId: getFuturesGridAiStrategy
+      security:
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Timestamp'
+        - name: base
+          in: query
+          required: true
+          description: Base currency (e.g. BTC.PERP)
+          schema:
+            type: string
+        - name: quote
+          in: query
+          required: true
+          description: Quote currency (e.g. USDT)
+          schema:
+            type: string
+        - name: trend
+          in: query
+          required: true
+          description: "Grid direction. One of: `long`, `short`, `no_trend`."
+          schema:
+            type: string
+            enum: [long, short, no_trend]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/BaseResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/FuturesGridAiStrategy'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2667,6 +2721,66 @@ components:
         unlockQuoteAmount:
           type: string
           description: Quote amount returned to main account
+
+    FuturesGridAiStrategy:
+      type: object
+      description: AI-recommended futures grid strategy (standard tier)
+      properties:
+        strategyId:
+          type: string
+          description: Strategy ID
+        trend:
+          type: string
+          description: "Grid direction echoed from the request (`long`, `short`, or `no_trend`)"
+        options:
+          type: array
+          description: List of recommended strategy options; empty for a pair with no AI data
+          items:
+            $ref: '#/components/schemas/FuturesGridAiStrategyOption'
+
+    FuturesGridAiStrategyOption:
+      type: object
+      description: A single recommended futures grid parameter option
+      properties:
+        riskType:
+          type: string
+          description: "Risk profile of the option (e.g. conservative, robust, radical)"
+        leverage:
+          type: string
+          description: Recommended leverage
+        period:
+          type: integer
+          description: Backtesting period in days
+        annualized:
+          type: string
+          description: Estimated annualized return
+        totalApr:
+          type: string
+          description: Total APR
+        high:
+          type: string
+          description: Grid upper price
+        low:
+          type: string
+          description: Grid lower price
+        gridCount:
+          type: integer
+          description: Number of grid levels
+        maxDrawDown:
+          type: string
+          description: Estimated maximum drawdown
+        volatility:
+          type: string
+          description: Market volatility indicator
+        suitabilityMin:
+          type: integer
+          description: Minimum suitable investment amount
+        suitabilityMax:
+          type: integer
+          description: Maximum suitable investment amount
+        gridType:
+          type: string
+          description: "Grid type (e.g. arithmetic, geometric)"
 
     CreateFuturesGridRequest:
       type: object
