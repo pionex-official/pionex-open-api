@@ -14,6 +14,7 @@ This repository contains machine-readable API definitions in [OpenAPI 3.0](https
 | `openapi_earn_dual.yaml` | Earn API — Dual Investment endpoints (Beta) |
 | `openapi_partner.yaml` | Partner API — Partner program management endpoints (Invite Only) |
 | `openapi_wallet.yaml` | Wallet API — Account balance query endpoints |
+| `openapi_institution_v2.yaml` | Institution API (v2) — Sub-account onboarding and operation endpoints for institutional service providers (Internal) |
 | `websocketapi.yaml` | WebSocket API — Real-time market data and account updates |
 
 ## Quick Start
