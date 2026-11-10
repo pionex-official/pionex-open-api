@@ -399,7 +399,7 @@ paths:
         ```json
         {
           "userId": "88001234-....",
-          "subject": { "fields": [ { "key": "subject.legalNameEn", "value": "Acme Ltd." } ] },
+          "subject": { "fields": [ { "key": "subject.legalNameEn", "value": "Acme Ltd" } ] },
           "representatives": [ { "representativeRef": "PERSON-01", "fields": [ { "key": "representative.firstName", "value": "..." } ] } ],
           "documents": [ { "purpose": "subject.sourceOfFundsProof", "fileId": "...", "scope": "SUBJECT" },
                          { "purpose": "representative.passport", "fileId": "...", "scope": "REPRESENTATIVE", "representativeRef": "PERSON-01" } ]
@@ -420,8 +420,8 @@ paths:
         # Platform KYB Field Reference
 
         The canonical fields and documents accepted by `POST /kyb/create`. Applies
-        to companies registered in **Hong Kong (HK)** or the **United States
-        (US)**.
+        to companies registered in **Hong Kong (HK)** or **other jurisdictions**
+        (`Other` column).
 
         ## Required markers
 
@@ -431,35 +431,35 @@ paths:
         | **C** | Conditional - required when the trigger in the description holds. |
         | **O** | Optional - providing it speeds up review; omitting it does not block. |
 
-        The `HK` / `US` columns give the marker per jurisdiction
+        The `HK` / `Other` columns give the marker per jurisdiction
         (`subject.country`). `N/A` means the field is ignored for that
         jurisdiction. Files are submitted as `documents[]` with the document's
         canonical key as `purpose` and a `fileId`.
 
         ## 1. Subject fields (`subject.*`)
 
-        | Key | HK | US | Rules |
+        | Key | HK | Other | Rules |
         |-----|:--:|:--:|-------|
-        | `subject.country` | M | M | Registration jurisdiction. `HK` / `US`. Drives all validation. |
-        | `subject.legalNameEn` | M | M | Legal English name, <=200. Must match the registration document exactly (incl. `Limited`/`Ltd.`/`Inc.` suffix). Non-Latin names need an official English translation. |
-        | `subject.legalNameCn` | O | N/A | Legal Chinese name, <=100. HK companies registered in Chinese should provide it; N/A for US. |
-        | `subject.registrationNo` | M | M | HK: Business Registration No.; US: IRS EIN (format `XX-XXXXXXX`). <=32. |
-        | `subject.registrationNoType` | M | M | `BRN` (HK) / `EIN` (US). Must match `subject.country`. |
-        | `subject.businessType` | M | M | Org form (enum below). Also determines which US charter document is required. |
+        | `subject.country` | M | M | Registration jurisdiction, ISO 3166-1 alpha-2 (see Enums). |
+        | `subject.legalNameEn` | M | M | Legal English name, <=200. Must match the registration document exactly (incl. `Limited`/`Ltd.`/`Inc.` suffix). Non-Latin names need an official English translation. **Format:** 1-50 chars, letters, digits and spaces only - no punctuation, so write `Ltd` rather than `Ltd.` (see Field format rules). |
+        | `subject.legalNameCn` | O | N/A | Legal Chinese name, <=100. HK companies registered in Chinese should provide it; N/A for Other. |
+        | `subject.registrationNo` | M | M | HK: Business Registration No.; Other: local company registration number (US: IRS EIN, format `XX-XXXXXXX`). <=32. |
+        | `subject.registrationNoType` | M | M | Expected `BRN` (HK) / `EIN` (US) / the local registration type for other jurisdictions. Any non-empty value is accepted; the API does not check it against `subject.country`. |
+        | `subject.businessType` | M | M | Org form (enum below). Also determines which formation document Other requires. |
         | `subject.incorporationDate` | M | M | `yyyy-MM-dd`. Companies incorporated < 6 months may enter enhanced due diligence. |
-        | `subject.incorporationState` | N/A | M | US state code (e.g. `DE`, `CA`). US only. |
+        | `subject.incorporationState` | N/A | M | State of incorporation (e.g. `DE`, `CA` for US). Other only. |
         | `subject.email` | M | M | Official business email, <=128. A free-email domain (gmail/qq/163...) triggers manual review. |
         | `subject.phone.countryCode` | C | C | Intl. dialing code without `+` (e.g. `852`, `1`). Required if phone is provided. |
         | `subject.phone.number` | C | C | Required if phone is provided. <=20. |
         | `subject.website` | O | O | Must include scheme (`https://`), <=256. Recommended for e-commerce/platform businesses. |
-        | `subject.registeredAddress.addressLine1` | M | M | Street + number, <=200. **No P.O. Box**; US must include a street number. |
+        | `subject.registeredAddress.addressLine1` | M | M | Street + number, <=200. **No P.O. Box**; US must include a street number. **Format:** 1-180 chars, restricted character set, P.O. Box / PMB rejected (see Field format rules). |
         | `subject.registeredAddress.addressLine2` | O | O | Room/floor/unit, <=200. |
-        | `subject.registeredAddress.city` | M | M | <=100. |
-        | `subject.registeredAddress.state` | O | M | 2-letter state code (e.g. `NY`). US mandatory; HK may omit. |
-        | `subject.registeredAddress.postalCode` | O | M | US mandatory; HK has no postal codes. |
+        | `subject.registeredAddress.city` | M | M | <=100. **Format:** 1-20 chars, restricted character set (see Field format rules). |
+        | `subject.registeredAddress.state` | O | M | State / province / region (US: 2-letter state code, e.g. `NY`). Required for Other; HK may omit. |
+        | `subject.registeredAddress.postalCode` | O | M | Required for Other; HK has no postal codes. |
         | `subject.registeredAddress.countryCode` | M | M | ISO 3166-1 alpha-2. |
         | `subject.operatingAddressSameAsRegistered` | M | M | `true` / `false`. When `true`, omit `operatingAddress`. |
-        | `subject.operatingAddress.*` | C | C | Same sub-fields as `registeredAddress`. Required when `operatingAddressSameAsRegistered = false`. |
+        | `subject.operatingAddress.*` | C | C | Same sub-fields as `registeredAddress`. Required when `operatingAddressSameAsRegistered = false`. `addressLine1`, `city` and `state` follow the Field format rules below. |
         | `subject.businessDescription` | M | M | Concrete description of products/services, <=500. Vague terms ("trading", "consulting") are rejected for supplement. |
         | `subject.accountPurpose.cryptoTrading` | O | O | `true`/`false`. At least one `accountPurpose.*` should be `true`. |
         | `subject.accountPurpose.fiatDeposit` | O | O | `true`/`false`. |
@@ -487,14 +487,30 @@ paths:
         | `subject.deviceData.ipAddress` | M | M | Signer's public IP at consent time (IPv6-compatible), <=45. |
         | `subject.deviceData.userAgent` | M | M | Signer's User-Agent, <=512. |
 
+        ### Field format rules
+
+        These rules are enforced on `POST /kyb/create` and on the
+        `subject.fields` you send to `POST /wire/deposit/account/create`; a
+        violation returns `P_PAY_OPEN_API_INVALID_ARGUMENT` naming the key.
+
+        | Key | Rule |
+        |-----|------|
+        | `subject.legalNameEn` | 1-50 chars; letters `A-Za-z`, digits and spaces only. |
+        | `subject.registeredAddress.addressLine1` | 1-180 chars; letters, digits, spaces and `, . -` only. `P.O. Box` / `PO BOX` / `PMB` is rejected. |
+        | `subject.registeredAddress.city` | 1-20 chars; letters, digits, spaces and `/ - ? : ( ) . , ' +` only. |
+        | `subject.registeredAddress.state` | 1-15 chars; letters, digits, spaces and `- ? : ( ) . , ' +` only (no `/`). Checked only when a value is provided. |
+        | `subject.operatingAddress.addressLine1` | 1-180 chars; letters, digits, spaces and `/ - ? : ( ) . , ' +` only. |
+        | `subject.operatingAddress.city` | 1-20 chars; same character set as above. |
+        | `subject.operatingAddress.state` | 1-15 chars; letters, digits, spaces and `- ? : ( ) . , ' +` only (no `/`). Checked only when a value is provided. |
+
         ## 2. Subject documents (`subject.*`)
 
         Value is a `fileId`. Required matrix by jurisdiction:
 
-        | Key | HK | US | Notes |
+        | Key | HK | Other | Notes |
         |-----|:--:|:--:|-------|
         | `subject.businessRegistrationCertificate` | M | N/A | Business Registration Certificate (BR). |
-        | `subject.businessFormation` | M | M | Certificate of Incorporation (HK CI / US Certificate of Incorporation, issued by the Secretary of State). |
+        | `subject.businessFormation` | M | M | Certificate of Incorporation (HK: CI; Other: Certificate of Incorporation). |
         | `subject.incorporationFormNnc1` | C | N/A | Incorporation Form NNC1. Note 1. |
         | `subject.annualReturnNar1` | C | N/A | Annual Return NAR1. Note 1. |
         | `subject.einConfirmationLetter` | N/A | M | IRS EIN confirmation letter (CP575 / 147C). |
@@ -524,12 +540,12 @@ paths:
         - **Note 2 (ownership & directors):** submit at least one of
           `registerOfDirectors` / `ownershipProof` / `shareholdingStructureChart`
           that fully shows directors and ownership. If already evidenced by
-          NNC1/NAR1 (HK) or the charter document (US), it may be omitted, and
+          NNC1/NAR1 (HK) or the charter document (Other), it may be omitted, and
           `subject.ownershipDeclaration.*` may then also be omitted.
         - **Note 3:** if none of the above shows the full ownership chain (e.g.
           multi-tier holding), `shareholdingStructureChart` will be requested via
           supplement.
-        - **Note 4 (US charter):** submit the charter document matching
+        - **Note 4 (Other charter):** submit the charter document matching
           `businessType` - corporation subtypes (`B_CORPORATION` /
           `C_CORPORATION` / `CLOSE_CORPORATION` / `S_CORPORATION`) -> `bylaws`;
           `LLC` -> `operatingAgreement`; `LLP` / `LP` / `GENERAL_PARTNERSHIP` ->
@@ -555,10 +571,10 @@ paths:
         per-person id is the `representativeRef` property of each
         `representatives[]` entry, **not** a `fields[]` key.
 
-        | Key | HK | US | Rules |
+        | Key | HK | Other | Rules |
         |-----|:--:|:--:|-------|
         | `representativeRef` *(property - not a `fields[]` key)* | M | M | Stable per-person id in your system; keep unchanged across supplements. Supplied as the `representativeRef` property of each `representatives[]` entry - do **not** place it inside `fields`. `subject.signerPersonRefId` references this value. |
-        | `representative.role.responsibility` | O | O | The person's responsibility relative to the company - **single value** from the enum: `ULTIMATE_BENEFICIAL_OWNER` / `AUTHORIZED_REPRESENTATIVE` / `DIRECTOR`. |
+        | `representative.role.responsibility` | O | O | The person's responsibility relative to the company - **single value** from the enum: `ULTIMATE_BENEFICIAL_OWNER` / `DIRECTOR`. |
         | `representative.firstName` | M | M | English first name, <=100. Must match the ID exactly. |
         | `representative.middleName` | O | O | English middle name, <=100. Provide if present on the ID. |
         | `representative.lastName` | M | M | English last name, <=100. Must match the ID exactly. |
@@ -570,13 +586,13 @@ paths:
         | `representative.residentialAddress.addressLine1` | M | M | Actual residential address (not temporary), <=200. |
         | `representative.residentialAddress.addressLine2` | O | O | <=200. |
         | `representative.residentialAddress.city` | M | M | <=100. |
-        | `representative.residentialAddress.state` | O | M | US mandatory (2-letter state code). |
-        | `representative.residentialAddress.postalCode` | O | M | US mandatory. |
+        | `representative.residentialAddress.state` | O | M | Required for Other (US: 2-letter state code). |
+        | `representative.residentialAddress.postalCode` | O | M | Required for Other. |
         | `representative.residentialAddress.countryCode` | M | M | ISO 3166-1 alpha-2. |
         | `representative.email` | M | M | Required for every person, <=128 (used for verification-code delivery). |
         | `representative.phone.countryCode` | O | O | Recommended for the primary contact person. |
         | `representative.phone.number` | O | O | Recommended for the primary contact person. |
-        | `representative.identityDocument.ssn` | N/A | M | US: personal tax id (SSN/ITIN) for every person; N/A for HK. |
+        | `representative.identityDocument.ssn` | N/A | M | Other: personal tax id for every person (US: SSN/ITIN); N/A for HK. |
         | `representative.identityDocument.idType` | M | M | Enum below. |
         | `representative.identityDocument.idNumber` | M | M | <=64. |
         | `representative.identityDocument.issuingCountry` | M | M | ISO 3166-1 alpha-2. |
@@ -594,7 +610,7 @@ paths:
         | `representative.passport` | C | Passport photo page (front only) - when `idType = PASSPORT`. |
         | `representative.idCardFront` / `representative.idCardBack` | C | Both required for card-style IDs - see the idType routing note below. |
         | `representative.driversLicenseFront` / `representative.driversLicenseBack` | C | Both required when `idType = DRIVERS_LICENSE`. |
-        | `representative.taxIdDocument` | C | Tax-id proof (SSN / ITIN); provide together with `representative.identityDocument.ssn` for US persons. |
+        | `representative.taxIdDocument` | C | Tax-id proof (US: SSN / ITIN); provide together with `representative.identityDocument.ssn` for Other persons. |
         | `representative.proofOfAddress` | C | Required when the residential address differs from the ID's stated address. |
         | `representative.photoHoldingId` | O | Requested by risk control when fraud is suspected. |
         | `representative.liveSelfie` | O | As above. |
@@ -608,8 +624,14 @@ paths:
         a given channel/country is returned by the requirements flow - do not
         assume every value is accepted everywhere.
 
-        - **`subject.country`**: `HK`, `US`.
-        - **`subject.registrationNoType`**: `BRN` (HK), `EIN` (US).
+        - **`subject.country`**: ISO 3166-1 alpha-2 code, case-insensitive
+          (trimmed and stored upper-case). Any valid code is accepted; the `Other`
+          column of the field matrix covers every jurisdiction other than `HK`. An unknown
+          or malformed code returns `P_PAY_OPEN_API_INVALID_ARGUMENT`
+          (`invalid country code`).
+        - **`subject.registrationNoType`**: free-form, not an enumerated set.
+          Expected values are `BRN` (HK) and `EIN` (US); the API does not check
+          the value against `subject.country`.
         - **`subject.businessType`** (single list, not split by jurisdiction):
           `B_CORPORATION`, `C_CORPORATION`, `CLOSE_CORPORATION`, `S_CORPORATION`,
           `LLC`, `LLP`, `LP`, `GENERAL_PARTNERSHIP`, `SOLE_PROPRIETOR`, `TRUST`,
@@ -618,7 +640,7 @@ paths:
         - **`subject.serviceAgreementType`**: `FULL` (direct service
           relationship), `RECIPIENT` (payee only, no direct relationship).
         - **`representative.role.responsibility`** (single value):
-          `ULTIMATE_BENEFICIAL_OWNER`, `AUTHORIZED_REPRESENTATIVE`, `DIRECTOR`.
+          `ULTIMATE_BENEFICIAL_OWNER`, `DIRECTOR`.
         - **`representative.identityDocument.idType`**: `PASSPORT`,
           `DRIVERS_LICENSE`, `NATIONAL_ID`, `STATE_OR_PROVINCIAL_ID`,
           `PERMANENT_RESIDENCY_ID`, `MATRICULATE_ID`, `MILITARY_ID`, `VISA`.
@@ -635,12 +657,15 @@ paths:
 
         ## 6. File limits
 
-        | Limit | Value |
-        |-------|-------|
-        | Max file count per submission | 30 |
-        | Max bytes per file | 12,582,912 (12 MB) |
-        | Max total bytes per submission | 104,857,600 (100 MB) |
-        | Allowed content types | `application/pdf`, `image/jpeg`, `image/png`, `image/heic` |
+        | Limit | Value | Enforced by the API |
+        |-------|-------|:-------------------:|
+        | Max bytes per file | 12,582,912 (12 MiB) | Yes, at `POST /file/upload` |
+        | Allowed content types | `application/pdf`, `image/jpeg`, `image/png`, `image/heic` | Yes, at `POST /file/upload` (matched against the `Content-Type` you declare for the file part; file content is not inspected) |
+        | Max file count per submission | 30 | No - guidance only |
+        | Max total bytes per submission | 104,857,600 (100 MiB) | No - guidance only |
+
+        A file over the size limit or outside the allowed types is rejected at
+        upload with `P_PAY_OPEN_API_INVALID_ARGUMENT`.
 
         ## 7. Role integrity & cross-field rules
 
@@ -648,14 +673,14 @@ paths:
         the following fails:
 
         - **Registration type matches jurisdiction:** `HK` => `registrationNoType = BRN`; `US` => `EIN`.
-        - **US state present:** `US` requires `subject.incorporationState`.
+        - **Other state present:** `Other` requires `subject.incorporationState`.
         - **Operating address present** when `operatingAddressSameAsRegistered = false`.
         - **Every representative has an `email`.**
         - **Beneficial owner ownership:** when `subject.ownershipDeclaration.hasShareholderOver25Percent = true` (or an ownership document shows a >=25% holder), at least one representative must have `role.responsibility = ULTIMATE_BENEFICIAL_OWNER`. Each such person's `ownershipPercentage` must be in `(0, 100]`, and the sum must not exceed 100.
         - **ID not expired**; ID **back** file present for card-style IDs and `DRIVERS_LICENSE`.
         - **Age >= 18** (from `birthDate`).
-        - **US charter document matches `businessType`** (see Note 4).
-        - **US personal tax id present** (`representative.identityDocument.ssn`) for every representative.
+        - **Other charter document matches `businessType`** (see Note 4).
+        - **Personal tax id present** (`representative.identityDocument.ssn`) for every Other representative.
         - **Required company documents present** per the matrix; source-of-funds proof present; ownership information resolvable (either an ownership document or `subject.ownershipDeclaration.*`).
         - **Consents accepted:** `termsAgreed` and `dataUsageAgreed` are `true`.
 
@@ -704,6 +729,15 @@ paths:
       summary: Get platform KYB status
       description: |
         Get the platform KYB status for a `userId`.
+
+        | `status` | Meaning |
+        |----------|---------|
+        | `SUBMITTED` | Submitted (the status returned by `POST /kyb/create`). |
+        | `APPROVED` | Approved. |
+        | `REJECTED` | Rejected. |
+
+        `reason` and `message` carry the review conclusion when the reviewer has
+        set them; when empty, the fields are omitted from the response entirely.
       operationId: institutionKybGet
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -739,10 +773,23 @@ paths:
         Channel KYB fields are **dynamic** - call this endpoint first, then fill
         per the returned `Requirement` items. Do not hard-code channel field lists.
 
-        - **`mode`** is the source of truth for whether to submit an item:
-          `REQUIRED` (must submit), `OPTIONAL`, or `CONDITIONAL`. `CONDITIONAL`
-          means the item becomes required only when other fields take certain
-          values; when unsure, submit it.
+        - **`mode`** is the source of truth for whether to submit an item. It
+          is returned as the full string `KYB_REQUIREMENT_MODE_REQUIRED` (must
+          submit), `KYB_REQUIREMENT_MODE_OPTIONAL`, or
+          `KYB_REQUIREMENT_MODE_CONDITIONAL`. `CONDITIONAL` means the item becomes
+          required only when other fields take certain values - those values are
+          described by `condition`; when unsure, submit it.
+        - **`condition`** appears only on `CONDITIONAL` items:
+          `{ logic, predicates: [ { fieldKey, operator, values } ] }`. `logic` is
+          `KYB_CONDITION_LOGIC_ALL` (all predicates must hold) or
+          `KYB_CONDITION_LOGIC_ANY` (any one). Each predicate compares the
+          submitted value of `fieldKey` with `values` using `operator`:
+          `KYB_CONDITION_OPERATOR_EQUALS`, `..._NOT_EQUALS`, `..._IN`,
+          `..._NOT_IN`, `..._PRESENT` or `..._NOT_PRESENT` (the last two test
+          whether the field or document has been submitted at all). `values` is
+          omitted when empty.
+        - **`required`** is a deprecated boolean mirror of `mode` (`true` only for
+          `REQUIRED`); read `mode` instead.
         - **`kind`** is `FIELD` or `DOCUMENT`. Documents are referenced by
           `fileId` (upload first); do not inline file bytes.
         - Representatives are grouped by `representativeRef`.
@@ -804,6 +851,8 @@ paths:
         | Error Code | Description |
         |------------|-------------|
         | `P_PAY_OPEN_API_INTERNAL_KYB_NOT_APPROVED` | Platform KYB is not approved yet; it must be approved before channel onboarding. |
+        | `P_PAY_OPEN_API_KYB_SUBMIT_IN_PROGRESS` | Another onboarding submission for this `userId` and channel is being processed; retry later. |
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | A referenced `fileId` does not exist or does not belong to this `userId`, or a field value violates the Field format rules (the message names the key). |
         | `P_PAY_OPEN_API_WIRE_DUPLICATE_CLIENT_ORDER_ID` | An onboarding submission already exists, but this request's payload differs from it. |
         | `P_PAY_OPEN_API_WIRE_CUSTOMER_INFO_REJECTED` | The company or representative information was rejected or conflicts with an existing record. |
         | `P_PAY_OPEN_API_WIRE_SUBJECT_TYPE_CONFLICT` | This `userId` already has an individual subject, conflicting with company onboarding. |
@@ -995,10 +1044,17 @@ paths:
         List deposit orders for a `userId`. Requires the `userId`'s platform KYB to
         be `APPROVED`.
 
+        `startTime` is inclusive and `endTime` is exclusive, both applied to the
+        order creation time. A `status` filter
+        that no order of the channel can have (for example `CREDITED` on FV Bank /
+        SCB/DBS Bank, see `DepositOrder.status`) returns an empty list.
+
         **Errors:**
 
         | Error Code | Description |
         |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `status` is not a valid deposit order status (`invalid status`). |
+        | `P_PAY_OPEN_API_WIRE_INVALID_PARAMS` | `startTime` is greater than or equal to `endTime` (when both are set). |
         | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | `currency` is set to something other than `USD`. |
 
         Common and wire-common codes (see **Error Codes**) also apply. Failure
@@ -1022,10 +1078,11 @@ paths:
         - name: status
           in: query
           required: false
+          description: "Filter by order status, uppercase (case-sensitive): `PENDING` / `CREDITED` / `COMPLETED` / `FAILED` / `CANCELED`. The full enum name (e.g. `DEPOSIT_ORDER_STATUS_PENDING`) is also accepted. Omit for no filter; an unknown value returns `P_PAY_OPEN_API_INVALID_ARGUMENT`."
           schema:
             type: string
-        - $ref: '#/components/parameters/StartTime'
-        - $ref: '#/components/parameters/EndTime'
+        - $ref: '#/components/parameters/OrderStartTime'
+        - $ref: '#/components/parameters/OrderEndTime'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
       responses:
@@ -1125,7 +1182,8 @@ paths:
 
         | Error Code | Description |
         |------------|-------------|
-        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | The `country` / `currency` / `rail` combination is not a supported USD corridor. |
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `country` is set but is not a valid ISO 3166-1 alpha-2 code (`invalid country code`). |
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | The `country` / `currency` / `rail` combination is not a supported USD corridor. On FV Bank and SCB/DBS Bank all three are required: `currency` must be `USD`, `country` a 2-letter code, `rail` `international_wire`. |
 
         Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutAccountRequirements
@@ -1135,23 +1193,25 @@ paths:
         - name: channel
           in: query
           required: false
+          description: Channel. FV Bank and SCB/DBS Bank are never selected automatically, so always pass `channel` for them.
           schema:
             type: string
         - name: country
           in: query
           required: false
-          description: ISO 3166-1 alpha-2.
+          description: "ISO 3166-1 alpha-2, case-insensitive. Required by FV Bank and SCB/DBS Bank."
           schema:
             type: string
         - name: currency
           in: query
           required: false
-          description: ISO 4217.
+          description: ISO 4217. FV Bank and SCB/DBS Bank require `USD`.
           schema:
             type: string
         - name: rail
           in: query
           required: false
+          description: "Clearing rail, lowercase. FV Bank and SCB/DBS Bank require `international_wire`; any other value returns `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR`. See `PayoutAccountSpec.rail` for the full value set."
           schema:
             type: string
       responses:
@@ -1188,7 +1248,15 @@ paths:
         Create a payout (payee) account. Fields in `spec` are constrained by the
         requirements endpoint. Requires the `userId`'s platform KYB to be
         `APPROVED`. Wait for the account to reach `AVAILABLE` before submitting a
-        payout against it.
+        payout against it (SCB/DBS Bank also accepts a payout against an
+        `IN_REVIEW` account - see **Create a payout**).
+
+        `holderType` and `accountType` must be sent as the full enum names
+        (`ACCOUNT_HOLDER_TYPE_INDIVIDUAL`, `BANK_ACCOUNT_TYPE_CHECKING`, ...); the
+        lowercase aliases `individual` / `business` and `checking` / `savings`
+        are also accepted. Short uppercase names such as `INDIVIDUAL` are
+        rejected with `P_PAY_OPEN_API_INVALID_ARGUMENT`. `PayoutAccount` responses
+        do not echo either field.
 
         ## Channel-specific `spec` fields
 
@@ -1229,7 +1297,8 @@ paths:
 
         | Error Code | Description |
         |------------|-------------|
-        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | Not a supported USD international-wire / country combination, or a base account field is missing. |
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `channel`, `clientAccountId` (1-64 chars) or `spec` is missing; `holderType` / `accountType` is not one of the accepted values; or `spec.country` is set but is not a valid ISO 3166-1 alpha-2 code. |
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | Not a supported USD international-wire / country combination, or a base account field is missing. On FV Bank and SCB/DBS Bank: `currency` is not `USD`, `country` is not a 2-letter code, `rail` is not `international_wire`, or `accountHolderName` / `bankName` / `accountNumber` is blank. |
         | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The channel beneficiary or virtual account is not active yet. |
         | `P_PAY_OPEN_API_WIRE_KYB_OUTCOME_UNKNOWN` | The channel could not confirm account creation, or matched more than one remote record. |
 
@@ -1252,7 +1321,12 @@ paths:
                   description: Sub-account UUID.
                 clientAccountId:
                   type: string
-                  description: Bind idempotency id, unique per `userId`, 1-64 chars. Retries must reuse the original value.
+                  description: |
+                    Client-defined account id, required, 1-64 chars. **FV Bank and SCB/DBS Bank
+                    do not use it** (it must still be sent,
+                    but it is neither stored nor checked): they de-duplicate by `accountNumber`
+                    instead - creating an account whose `accountNumber` is already registered
+                    for this `userId` returns the existing account rather than a new one.
                   minLength: 1
                   maxLength: 64
                 channel:
@@ -1414,6 +1488,32 @@ paths:
         re-send with the **same** `clientOrderId` (or query first via List/Get
         Payout Order) - never retry with a new key.
 
+        **FV Bank and SCB/DBS Bank:** a `clientOrderId` that
+        already has an order on the same channel returns that existing order
+        (with its current `status`) **without re-validating or comparing** the
+        request body - a retry with a different `payoutAccountId`, currency or
+        `amount` does not fail and does not change the order. Only a
+        `clientOrderId` already used on a different channel is rejected
+        (`DUPLICATE_CLIENT_ORDER_ID`).
+
+        **FV Bank and SCB/DBS Bank rules:**
+
+        - Only `sourceCurrency = USDT` and `targetCurrency = USD` are supported.
+        - `amount` (in USDT) must be at least `100`; a smaller or non-numeric
+          value returns `AMOUNT_OUT_OF_RANGE`. The fee is deducted from `amount`
+          - see `feeAmount` and `finalAmount` in the response. The fee schedule
+          may be set per account, so read it from the response rather than
+          computing it.
+        - `channelExtra` must be empty or omitted; any entry returns
+          `WIRE_INVALID_PARAMS`.
+        - FV Bank requires the payout account to be `AVAILABLE`. SCB/DBS Bank
+          also accepts an `IN_REVIEW` account: the order is created (status
+          `IN_REVIEW`) and proceeds once the account is verified (if the account
+          is later rejected, the order fails with reason `ACCOUNT_NOT_AVAILABLE`);
+          only a `NEEDS_UPDATE` account is rejected up front with
+          `ACCOUNT_NOT_AVAILABLE`.
+        - A new order starts as `IN_REVIEW`.
+
         **Errors:** these are returned only when the request is rejected before an
         order is created. Once an order exists the call returns `result: true` and
         any failure (insufficient balance, AML, etc.) is carried on the order's
@@ -1421,11 +1521,13 @@ paths:
 
         | Error Code | Description |
         |------------|-------------|
-        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | Not a supported `sourceCurrency` → `targetCurrency` pair. |
-        | `P_PAY_OPEN_API_WIRE_AMOUNT_OUT_OF_RANGE` | The `amount` is invalid, below the minimum, or fails fee calculation. |
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `clientOrderId` is missing. |
+        | `P_PAY_OPEN_API_WIRE_INVALID_PARAMS` | `channel`, `payoutAccountId` or `amount` is missing or blank; `clientOrderId` is longer than 64 bytes; or (FV Bank / SCB/DBS Bank) `channelExtra` is not empty. |
+        | `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR` | Not a supported `sourceCurrency` → `targetCurrency` pair. FV Bank / SCB/DBS Bank: anything other than `USDT` → `USD`. |
+        | `P_PAY_OPEN_API_WIRE_AMOUNT_OUT_OF_RANGE` | The `amount` is invalid, below the minimum (FV Bank / SCB/DBS Bank: 100), or fails fee calculation. |
         | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | The `payoutAccountId` does not exist. |
-        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The payout account is not ready (not yet `AVAILABLE`). |
-        | `P_PAY_OPEN_API_WIRE_DUPLICATE_CLIENT_ORDER_ID` | The `clientOrderId` was reused with a different channel, account, currency, or amount. |
+        | `P_PAY_OPEN_API_WIRE_ACCOUNT_NOT_AVAILABLE` | The payout account is not usable. FV Bank: the account is not `AVAILABLE`, or the channel onboarding is not active. SCB/DBS Bank: the account is `NEEDS_UPDATE`, or the channel onboarding is not active. |
+        | `P_PAY_OPEN_API_WIRE_DUPLICATE_CLIENT_ORDER_ID` | FV Bank / SCB/DBS Bank: the `clientOrderId` was already used for an order on a different channel (or a concurrent request with the same key was being inserted). Reusing it on the same channel does not return this error. |
 
         Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutOrderCreate
@@ -1437,30 +1539,35 @@ paths:
           application/json:
             schema:
               type: object
-              required: [userId, clientOrderId]
+              required: [userId, clientOrderId, channel, payoutAccountId, amount]
               properties:
                 userId:
                   type: string
                   description: Sub-account UUID.
                 clientOrderId:
                   type: string
-                  description: Globally unique idempotency key. Retries must reuse the original value.
+                  description: Idempotency key, max 64 bytes (leading/trailing whitespace is trimmed); longer values return `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`. Use a unique value per payout; retries must reuse the original value.
+                  maxLength: 64
                 channel:
                   type: string
+                  description: Channel. Required; a missing or blank value returns `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`.
                 payoutAccountId:
                   type: string
-                  description: Target payout account (`accountId` from Create/List Payout Account).
+                  description: Target payout account (`accountId` from Create/List Payout Account). Required; a missing or blank value returns `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`.
                 sourceCurrency:
                   type: string
-                  description: Debit asset code (e.g. `USDT`).
+                  description: Debit asset code. FV Bank and SCB/DBS Bank accept `USDT` only (case-insensitive).
+                  example: USDT
                 targetCurrency:
                   type: string
-                  description: Credited asset code (e.g. `USD`).
+                  description: Credited asset code. FV Bank and SCB/DBS Bank accept `USD` only (case-insensitive).
+                  example: USD
                 amount:
                   type: string
-                  description: Total debit amount, in `sourceCurrency`.
+                  description: Total debit amount, in `sourceCurrency`. Required; a missing or blank value returns `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`. FV Bank and SCB/DBS Bank require at least `100`.
                 channelExtra:
                   type: array
+                  description: Not supported by FV Bank and SCB/DBS Bank - must be empty or omitted.
                   items:
                     $ref: '#/components/schemas/KeyValue'
       responses:
@@ -1480,6 +1587,7 @@ paths:
                             type: string
                           status:
                             type: string
+                            description: "Order status (see `PayoutOrder.status`); `IN_REVIEW` for a new FV Bank / SCB/DBS Bank order."
                           amount:
                             type: string
                           feeAmount:
@@ -1500,6 +1608,20 @@ paths:
       description: |
         List payout orders for a `userId`. Requires the `userId`'s platform KYB to
         be `APPROVED`.
+
+        `startTime` is inclusive and `endTime` is exclusive, both applied to the
+        order creation time. A `status` filter that no order of the channel can
+        have (for example `PENDING` or `REFUNDED` on FV Bank / SCB/DBS Bank, see
+        `PayoutOrder.status`) returns an empty list.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `status` is not a valid payout order status (`invalid status`). |
+        | `P_PAY_OPEN_API_WIRE_INVALID_PARAMS` | `startTime` is greater than or equal to `endTime` (when both are set). |
+
+        Common and wire-common codes (see **Error Codes**) also apply.
       operationId: institutionPayoutOrdersList
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1512,10 +1634,11 @@ paths:
         - name: status
           in: query
           required: false
+          description: "Filter by order status, uppercase (case-sensitive): `PENDING` / `IN_REVIEW` / `PROCESSING` / `COMPLETED` / `FAILED` / `RETURNED` / `REFUNDING` / `REFUNDED`. The full enum name (e.g. `PAYOUT_ORDER_STATUS_PENDING`) is also accepted. Omit for no filter; an unknown value returns `P_PAY_OPEN_API_INVALID_ARGUMENT`."
           schema:
             type: string
-        - $ref: '#/components/parameters/StartTime'
-        - $ref: '#/components/parameters/EndTime'
+        - $ref: '#/components/parameters/OrderStartTime'
+        - $ref: '#/components/parameters/OrderEndTime'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
       responses:
@@ -1549,13 +1672,15 @@ paths:
       tags: [Payout]
       summary: Get a payout order
       description: |
-        Get a single payout order by `orderId` **or** `clientOrderId`. Requires the
-        `userId`'s platform KYB to be `APPROVED`.
+        Get a single payout order by `orderId` **or** `clientOrderId`; if both
+        are sent, `orderId` is used. Requires the `userId`'s platform KYB to be
+        `APPROVED`.
 
         **Errors:**
 
         | Error Code | Description |
         |------------|-------------|
+        | `P_PAY_OPEN_API_WIRE_INVALID_PARAMS` | Neither `orderId` nor `clientOrderId` is provided, or only `clientOrderId` is given and it is longer than 64 bytes. |
         | `P_PAY_OPEN_API_WIRE_RESOURCE_NOT_FOUND` | No order matches the given `orderId` / `clientOrderId` for this `userId` + `channel`. |
 
         Common and wire-common codes (see **Error Codes**) also apply.
@@ -1888,8 +2013,14 @@ paths:
       tags: [Address Book]
       summary: List address-book entries
       description: |
-        List address-book entries for a `userId`. `currency` and `chain` are used
-        together.
+        List address-book entries for a `userId`. `currency` and `chain` are
+        optional filters, normally sent together; the API does not validate that
+        they are paired. The list is not paginated: `total` is the number of
+        entries returned.
+
+        Rejections from the wallet service are returned under the matching common
+        code (see **Error Codes**), with the wallet service's message passed
+        through.
       operationId: institutionAddressBooksList
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1897,13 +2028,13 @@ paths:
         - name: currency
           in: query
           required: false
-          description: Use together with `chain`.
+          description: Optional filter, normally sent together with `chain` (the pairing is not validated).
           schema:
             type: string
         - name: chain
           in: query
           required: false
-          description: Use together with `currency`.
+          description: Optional filter, normally sent together with `currency` (the pairing is not validated).
           schema:
             type: string
         - name: onlyWhitelist
@@ -1943,6 +2074,18 @@ paths:
       summary: Add an address-book entry
       description: |
         Add an address-book entry for a `userId`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | A required field is missing or a field exceeds its maximum length. |
+        | `P_PAY_OPEN_API_ALREADY_EXISTS` | The address is already in the address book. |
+        | `P_PAY_OPEN_API_UNSUPPORTED_CURRENCY` | The `currency` + `chain` combination is not supported. |
+
+        Other rejections from the wallet service are returned under the matching
+        common code (see **Error Codes**); the wallet service's message is passed
+        through.
       operationId: institutionAddressBookAdd
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -1958,14 +2101,24 @@ paths:
                   type: string
                 currency:
                   type: string
+                  description: Max 50 chars.
+                  maxLength: 50
                 chain:
                   type: string
+                  description: Max 50 chars.
+                  maxLength: 50
                 address:
                   type: string
+                  description: Max 200 chars.
+                  maxLength: 200
                 label:
                   type: string
+                  description: Max 100 chars.
+                  maxLength: 100
                 memo:
                   type: string
+                  description: Optional Tag/Memo, max 100 chars.
+                  maxLength: 100
       responses:
         '200':
           description: Successful response
@@ -1991,6 +2144,16 @@ paths:
       summary: Delete an address-book entry
       description: |
         Delete an address-book entry for a `userId`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `addressId` is missing or longer than 60 chars. |
+
+        Rejections from the wallet service are returned under the matching common
+        code (see **Error Codes**); the wallet service's message is passed
+        through.
       operationId: institutionAddressBookDelete
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -2006,6 +2169,8 @@ paths:
                   type: string
                 addressId:
                   type: string
+                  description: Max 60 chars.
+                  maxLength: 60
       responses:
         '200':
           description: Successful response
@@ -2082,6 +2247,7 @@ paths:
 
         | Error Code | Description |
         |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `userId`, `baseCoin`, `quoteCoin` or `side` is missing, or `side` is not `BUY` / `SELL` (case-insensitive). |
         | `P_PAY_OPEN_API_CONVERT_INVALID_AMOUNT` | `side=SELL` without `baseAmount`, or `side=BUY` without `quoteAmount`. |
         | `P_PAY_OPEN_API_SYMBOL_MAINTENANCE` | Trading pair under maintenance. |
         | `P_PAY_OPEN_API_SYMBOL_MARKET_CLOSE` | Trading pair closed (non-trading day). |
@@ -2107,6 +2273,7 @@ paths:
                 side:
                   type: string
                   enum: [BUY, SELL]
+                  description: Case-insensitive (`buy` / `sell` are accepted); any other value returns `P_PAY_OPEN_API_INVALID_ARGUMENT`. Responses always use uppercase.
                 baseAmount:
                   type: string
                   description: Base amount - required only when `side=SELL`.
@@ -2178,6 +2345,12 @@ paths:
       summary: Get a conversion order
       description: |
         Get a single conversion order.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_NOT_FOUND` | No conversion order matches `orderId` for this `userId`. |
       operationId: institutionConvertOrderGet
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -2218,6 +2391,24 @@ paths:
         Upload a file (KYB / supporting documents), referenced elsewhere by
         `fileId`. `userId` is passed in the **query string** (the request body is
         multipart, so `userId` cannot go in the body here).
+
+        - **Size:** at most 12,582,912 bytes (12 MiB) per file.
+        - **Type:** `application/pdf`, `image/jpeg`, `image/png` or `image/heic`.
+          The check uses the `Content-Type` you declare on the `file` part
+          (case-insensitive, parameters ignored); the file content is not
+          inspected, and a part without a `Content-Type` is rejected.
+        - `fileId` has the form `fiat_transfer/{userId}/{uuid}`. Pass it back
+          verbatim, including the slashes.
+        - A file belongs to the `userId` it was uploaded under; other users
+          cannot reference or download it.
+        - The per-submission count / total-size figures in the KYB reference are
+          not enforced here.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | The `file` part is missing, the type is not allowed, or the file exceeds 12 MiB. |
       operationId: institutionFileUpload
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -2261,7 +2452,18 @@ paths:
       tags: [File]
       summary: Download a file
       description: |
-        Download a previously uploaded file by `fileId`. Returns a binary stream.
+        Download a previously uploaded file by `fileId`.
+
+        On success the response body is the raw file bytes and `Content-Type` is
+        the type declared at upload (for example `application/pdf`). On failure
+        the response is a JSON body with `result: false`, still with HTTP `200`.
+
+        **Errors:**
+
+        | Error Code | Description |
+        |------------|-------------|
+        | `P_PAY_OPEN_API_INVALID_ARGUMENT` | `fileId` is missing. |
+        | `P_PAY_OPEN_API_NOT_FOUND` | The file does not exist, or belongs to another user. |
       operationId: institutionFileDownload
       parameters:
         - $ref: '#/components/parameters/Timestamp'
@@ -2273,12 +2475,27 @@ paths:
             type: string
       responses:
         '200':
-          description: Binary file stream
+          description: "The file bytes with the `Content-Type` declared at upload; on failure, a JSON error body (`result: false`)."
           content:
-            application/octet-stream:
+            application/pdf:
               schema:
                 type: string
                 format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/heic:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -2331,16 +2548,18 @@ components:
       name: page
       in: query
       required: false
-      description: Page number, starting from 1.
+      description: Page number, starting from 1. Defaults to 1 when omitted or 0.
       schema:
         type: integer
+        default: 1
     Size:
       name: size
       in: query
       required: false
-      description: Page size.
+      description: "Page size. Defaults to 20 when omitted or 0. The effective maximum is 100: a larger value is silently reduced to 100 and no error is returned."
       schema:
         type: integer
+        default: 20
     StartTime:
       name: startTime
       in: query
@@ -2354,6 +2573,22 @@ components:
       in: query
       required: false
       description: End time, millisecond Unix timestamp.
+      schema:
+        type: integer
+        format: int64
+    OrderStartTime:
+      name: startTime
+      in: query
+      required: false
+      description: "Start of the order creation-time range, millisecond Unix timestamp, inclusive. Omit or `0` for no lower bound."
+      schema:
+        type: integer
+        format: int64
+    OrderEndTime:
+      name: endTime
+      in: query
+      required: false
+      description: "End of the order creation-time range, millisecond Unix timestamp, **exclusive**. Omit or `0` for no upper bound. When both bounds are set, `startTime` must be less than `endTime`, otherwise `P_PAY_OPEN_API_WIRE_INVALID_PARAMS`."
       schema:
         type: integer
         format: int64
@@ -2484,10 +2719,10 @@ components:
           enum: [SUBMITTED, APPROVED, REJECTED]
         reason:
           type: string
-          description: Review conclusion code; empty before review.
+          description: Review conclusion code; omitted from the response when empty.
         message:
           type: string
-          description: Conclusion description; empty before review.
+          description: Conclusion description; omitted from the response when empty.
 
     Requirement:
       type: object
@@ -2498,9 +2733,13 @@ components:
         kind:
           type: string
           enum: [FIELD, DOCUMENT]
+        required:
+          type: boolean
+          deprecated: true
+          description: Deprecated mirror of `mode` (`true` only when `mode` is `KYB_REQUIREMENT_MODE_REQUIRED`). Read `mode`.
         mode:
           type: string
-          enum: [REQUIRED, OPTIONAL, CONDITIONAL]
+          enum: [KYB_REQUIREMENT_MODE_REQUIRED, KYB_REQUIREMENT_MODE_OPTIONAL, KYB_REQUIREMENT_MODE_CONDITIONAL]
           description: Source of truth for whether to submit the item.
         label:
           type: string
@@ -2512,6 +2751,36 @@ components:
           type: array
           items:
             type: string
+        condition:
+          type: object
+          description: Present only when `mode` is `KYB_REQUIREMENT_MODE_CONDITIONAL`.
+          properties:
+            logic:
+              type: string
+              enum: [KYB_CONDITION_LOGIC_ALL, KYB_CONDITION_LOGIC_ANY]
+              description: How the predicates combine - all must hold, or any one.
+            predicates:
+              type: array
+              items:
+                type: object
+                properties:
+                  fieldKey:
+                    type: string
+                    description: Key of the field or document being tested.
+                  operator:
+                    type: string
+                    enum:
+                      - KYB_CONDITION_OPERATOR_EQUALS
+                      - KYB_CONDITION_OPERATOR_NOT_EQUALS
+                      - KYB_CONDITION_OPERATOR_IN
+                      - KYB_CONDITION_OPERATOR_NOT_IN
+                      - KYB_CONDITION_OPERATOR_PRESENT
+                      - KYB_CONDITION_OPERATOR_NOT_PRESENT
+                  values:
+                    type: array
+                    description: Comparison values; omitted when empty.
+                    items:
+                      type: string
 
     ChannelRequirements:
       type: object
@@ -2708,9 +2977,18 @@ components:
         status:
           type: string
           enum: [PENDING, CREDITED, COMPLETED, FAILED, CANCELED]
-          description: "`PENDING` (processing) / `CREDITED` (credited, not settled) / `COMPLETED` (final) / `FAILED` (final) / `CANCELED` (final)."
+          description: |
+            `PENDING` (processing) / `CREDITED` (credited, not settled) /
+            `COMPLETED` (final) / `FAILED` (final) / `CANCELED` (final).
+
+            **FV Bank and SCB/DBS Bank never produce
+            `CREDITED`** - their orders go from `PENDING` straight to
+            `COMPLETED`, `FAILED` or `CANCELED` - so filtering by `CREDITED`
+            always returns an empty list. On these channels a `FAILED` or
+            `CANCELED` order always carries `reason.code = UNKNOWN`.
         rail:
           type: string
+          description: "Clearing rail, lowercase (see `PayoutAccountSpec.rail` for the value set); may be empty when the channel does not report one."
         rate:
           type: string
         reason:
@@ -2725,7 +3003,7 @@ components:
         creditedAt:
           type: integer
           format: int64
-          description: "`0` before crediting."
+          description: "`0` before crediting. Always `0` on FV Bank and SCB/DBS Bank."
         completedAt:
           type: integer
           format: int64
@@ -2753,6 +3031,7 @@ components:
           type: string
         rail:
           type: string
+          description: "Clearing rail, lowercase (see `PayoutAccountSpec.rail`). `international_wire` on FV Bank and SCB/DBS Bank."
         accountHolderName:
           type: string
         createdAt:
@@ -2775,11 +3054,18 @@ components:
           type: string
         country:
           type: string
+          description: "ISO 3166-1 alpha-2, case-insensitive. An invalid code returns `P_PAY_OPEN_API_INVALID_ARGUMENT`."
         rail:
           type: string
+          description: |
+            Clearing rail, lowercase. Known values: `wire`, `ach`, `fednow`,
+            `ach_same_day`, `international_wire`. **FV Bank and SCB/DBS Bank
+            only accept `international_wire`** and require it; any other value
+            (or none) returns `P_PAY_OPEN_API_WIRE_UNSUPPORTED_CORRIDOR`.
         holderType:
           type: string
-          enum: [INDIVIDUAL, BUSINESS]
+          enum: [ACCOUNT_HOLDER_TYPE_INDIVIDUAL, ACCOUNT_HOLDER_TYPE_BUSINESS]
+          description: "Full enum name. The lowercase aliases `individual` / `business` are also accepted; short uppercase names (`INDIVIDUAL`, `BUSINESS`) are rejected with `P_PAY_OPEN_API_INVALID_ARGUMENT`. When omitted it is treated as `ACCOUNT_HOLDER_TYPE_INDIVIDUAL`, so always set it explicitly for a business account."
         accountHolderName:
           type: string
         accountHolderAddress:
@@ -2792,7 +3078,8 @@ components:
           type: string
         accountType:
           type: string
-          enum: [CHECKING, SAVINGS]
+          enum: [BANK_ACCOUNT_TYPE_CHECKING, BANK_ACCOUNT_TYPE_SAVINGS]
+          description: "Full enum name. The lowercase aliases `checking` / `savings` are also accepted; short uppercase names (`CHECKING`, `SAVINGS`) are rejected with `P_PAY_OPEN_API_INVALID_ARGUMENT`. When omitted it is treated as `BANK_ACCOUNT_TYPE_CHECKING`."
         fileIds:
           type: array
           items:
@@ -2838,11 +3125,19 @@ components:
         status:
           type: string
           enum: [PENDING, IN_REVIEW, PROCESSING, COMPLETED, FAILED, RETURNED, REFUNDING, REFUNDED]
-          description: "`COMPLETED` / `FAILED` are final."
+          description: |
+            `COMPLETED` / `FAILED` are final.
+
+            **FV Bank and SCB/DBS Bank only produce
+            `IN_REVIEW`, `PROCESSING`, `COMPLETED` and `FAILED`.** A newly created
+            order is `IN_REVIEW`. `PENDING`, `RETURNED`, `REFUNDING` and `REFUNDED`
+            are never returned by these channels, so filtering by them returns an
+            empty list.
         reason:
           $ref: '#/components/schemas/Reason'
         rail:
           type: string
+          description: "Clearing rail, lowercase (see `PayoutAccountSpec.rail` for the value set). Always `international_wire` on FV Bank and SCB/DBS Bank."
         createdAt:
           type: integer
           format: int64
@@ -2856,7 +3151,7 @@ components:
         refundedAt:
           type: integer
           format: int64
-          description: "`0` before any refund."
+          description: "`0` before any refund. Always `0` on FV Bank and SCB/DBS Bank."
 
     Currency:
       type: object
